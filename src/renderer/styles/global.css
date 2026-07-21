@@ -1,0 +1,422 @@
+/* ============================================================
+   PLC IDE — estilos globales (tema oscuro)
+   ============================================================ */
+
+:root {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-panel: #2d2d2d;
+  --border: #3e3e42;
+  --text-primary: #cccccc;
+  --text-secondary: #858585;
+  --accent: #007acc;
+  --accent-hover: #1a8ad4;
+  --error: #f44747;
+  --warning: #cca700;
+  --success: #4ec9b0;
+
+  --menubar-h: 32px;
+  --toolbar-h: 44px;
+  --tabs-h: 34px;
+  --left-w: 220px;
+  --right-w: 240px;
+  --console-h: 180px;
+  --console-collapsed-h: 30px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* Scrollbars con estilo oscuro */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #424245;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4f4f53;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------- Layout raíz ---------------- */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--menubar-h) 1fr auto var(--toolbar-h);
+  height: 100vh;
+  width: 100vw;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: var(--left-w) 1fr var(--right-w);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------------- Menubar ---------------- */
+
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--menubar-h);
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.menubar__item {
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: default;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+.menubar__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menubar__brand {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------- Paneles laterales ---------------- */
+
+.panel {
+  background: var(--bg-panel);
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel--left {
+  border-right: 1px solid var(--border);
+}
+.panel--right {
+  border-left: 1px solid var(--border);
+}
+
+.panel__header {
+  padding: 8px 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+}
+
+/* ---------------- Árbol de proyecto ---------------- */
+
+.tree {
+  padding: 6px 0;
+  list-style: none;
+  margin: 0;
+}
+.tree__item {
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+  white-space: nowrap;
+}
+.tree__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.tree__item--child {
+  padding-left: 26px;
+}
+
+.hardware-card {
+  margin: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  padding: 12px;
+  text-align: center;
+}
+.hardware-card__title {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+/* ---------------- Centro / editor ---------------- */
+
+.center {
+  display: grid;
+  grid-template-rows: var(--tabs-h) 1fr;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-primary);
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text-primary);
+}
+.tab--active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-top: 2px solid var(--accent);
+}
+.tab--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editor-area {
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 24px;
+}
+.placeholder__icon {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+/* ---------------- Tabla de variables ---------------- */
+
+.var-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.var-table th,
+.var-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.var-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+}
+.var-table td {
+  color: var(--text-primary);
+}
+.tag {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  color: var(--accent);
+}
+
+.btn-ghost {
+  margin: 10px 12px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  align-self: flex-start;
+}
+.btn-ghost:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+/* ---------------- Consola inferior ---------------- */
+
+.console {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  height: var(--console-h);
+  min-height: 0;
+}
+.console--collapsed {
+  height: var(--console-collapsed-h);
+}
+.console__bar {
+  display: flex;
+  align-items: center;
+  height: var(--console-collapsed-h);
+  padding: 0 10px;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.console__title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.console__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.console__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 4px 0;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+}
+.console__row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.console__ts {
+  color: var(--text-secondary);
+}
+.console__row--info .console__text {
+  color: var(--text-primary);
+}
+.console__row--success .console__text {
+  color: var(--success);
+}
+.console__row--warning .console__text {
+  color: var(--warning);
+}
+.console__row--error .console__text {
+  color: var(--error);
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.icon-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------------- Toolbar inferior ---------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--toolbar-h);
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn:hover {
+  border-color: var(--accent);
+}
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.btn--primary:hover {
+  background: var(--accent-hover);
+}
+.btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn--disabled:hover {
+  border-color: var(--border);
+}
+
+.toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.select {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.select:focus {
+  outline: 1px solid var(--accent);
+}

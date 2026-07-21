@@ -1,0 +1,19 @@
+{
+  "name": "@plc-ide/compiler-core",
+  "version": "0.1.0",
+  "description": "Núcleo del compilador PLC IDE: AST intermedio y parser de Structured Text (ST)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
