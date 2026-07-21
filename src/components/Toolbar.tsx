@@ -2,11 +2,18 @@ import { useEffect, useState } from "react";
 import type { BoardDefinition } from "../shared/types";
 import { getBoards, getSerialPorts } from "../renderer/api/tauriApi";
 
+interface Props {
+  /** Dispara el pipeline ST → AST → C → guardar en disco. */
+  onCompilar: () => void;
+  /** True mientras la compilación está en curso (deshabilita el botón). */
+  compilando: boolean;
+}
+
 /**
- * Barra inferior de acciones. Los botones Compilar/Flashear/Monitorear están
- * deshabilitados visualmente hasta que exista el pipeline de compilación/flasheo.
+ * Barra inferior de acciones. "Compilar" ejecuta el pipeline real (ST→AST→C→disco).
+ * "Flashear" y "Monitorear" siguen deshabilitados hasta que exista esa fase.
  */
-export function Toolbar() {
+export function Toolbar({ onCompilar, compilando }: Props) {
   const [puertos, setPuertos] = useState<string[]>([]);
   const [puerto, setPuerto] = useState<string>("");
   const [placas, setPlacas] = useState<BoardDefinition[]>([]);
@@ -29,8 +36,13 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <button className="btn btn--primary btn--disabled" title="Disponible próximamente" disabled>
-        ▶ Compilar
+      <button
+        className={`btn btn--primary ${compilando ? "btn--disabled" : ""}`}
+        onClick={onCompilar}
+        disabled={compilando}
+        title={compilando ? "Compilando…" : "Genera el código C a partir del programa actual"}
+      >
+        {compilando ? "⏳ Compilando…" : "▶ Compilar"}
       </button>
       <button className="btn btn--disabled" title="Disponible próximamente" disabled>
         ⬆ Flashear

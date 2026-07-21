@@ -241,7 +241,7 @@ export class STParser {
       }
 
       // Símbolos de un caracter.
-      if ("();:,=<>".includes(c)) {
+      if ("();:,=<>.".includes(c)) {
         avanzar();
         tokens.push({ tipo: "SYMBOL", valor: c, linea: linInicio, columna: colInicio });
         continue;
@@ -468,13 +468,13 @@ export class STParser {
           p.pv = this.parseNumeroLiteral();
           break;
         case "Q":
-          p.q = this.expectIdent("Se esperaba una variable de salida para 'Q'");
+          p.q = this.parseNombreSalida("Q");
           break;
         case "ET":
-          p.et = this.expectIdent("Se esperaba una variable de salida para 'ET'");
+          p.et = this.parseNombreSalida("ET");
           break;
         case "CV":
-          p.cv = this.expectIdent("Se esperaba una variable de salida para 'CV'");
+          p.cv = this.parseNombreSalida("CV");
           break;
         default:
           throw this.error(
@@ -514,6 +514,36 @@ export class STParser {
       return Number(t.valor);
     }
     throw this.error("Se esperaba un tiempo (ej. T#5s) o un número en ms para 'PT'");
+  }
+
+  /**
+   * Parsea el nombre de una variable de salida de TON/CTU (Q, ET, CV), aceptando
+   * notación de punto opcional al estilo IEC 61131-3: "Timer1.Q" además de "Timer1".
+   *
+   * En nuestro modelo el campo tras el punto es azúcar sintáctica: la instancia
+   * (struct TON_t/CTU_t del runtime) ya expone t.Q/t.ET/t.CV directamente, así
+   * que "Q => Timer1.Q" y "Q => Timer1" producen el mismo AST (q_var: "Timer1").
+   * Si el campo mencionado no coincide con el parámetro, es un error de parseo.
+   */
+  private parseNombreSalida(nombreParam: string): string {
+    const instancia = this.expectIdent(
+      `Se esperaba una variable de salida para '${nombreParam}'`
+    );
+
+    if (this.coincide(".")) {
+      this.avanzar();
+      const campoTok = this.peek();
+      const campo = this.expectIdent(
+        `Se esperaba un campo (ej. '${nombreParam}') después de '.'`
+      );
+      if (campo.toUpperCase() !== nombreParam.toUpperCase()) {
+        throw new Error(
+          `[línea ${campoTok.linea}, columna ${campoTok.columna}] Campo '${campo}' inesperado para el parámetro ${nombreParam} en ${instancia}. Símbolo encontrado: '${campo}'`
+        );
+      }
+    }
+
+    return instancia;
   }
 
   /** Parsea un literal numérico para PV. */

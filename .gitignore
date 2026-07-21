@@ -53,6 +53,9 @@ logs/
 # --- Proyectos de usuario generados por la app (no son parte del repo) ---
 *.plcproj.bak
 
+# --- Código C generado por el compilador PLC (artefacto de build, no fuente) ---
+/generated/
+
 # --- Testing / coverage ---
 coverage/
 .nyc_output/

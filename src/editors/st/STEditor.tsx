@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import Editor, { type OnChange } from "@monaco-editor/react";
-import type { ConsoleMessage } from "../../shared/types";
+import type { ConsoleMessage, ParseResult } from "../../shared/types";
 import { parseSTCode } from "../../renderer/api/tauriApi";
 
 const CODIGO_EJEMPLO = `(* Programa de ejemplo: Control de Motor *)
@@ -23,22 +23,25 @@ const DEBOUNCE_MS = 800;
 interface Props {
   /** Envía mensajes a la consola inferior. */
   onLog: (tipo: ConsoleMessage["tipo"], texto: string) => void;
+  /** Reporta el código y el resultado de cada parseo (para que App.tsx pueda compilar sin re-parsear). */
+  onParsed: (code: string, result: ParseResult) => void;
 }
 
-export function STEditor({ onLog }: Props) {
+export function STEditor({ onLog, onParsed }: Props) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const parsear = useCallback(
     async (code: string) => {
       const resultado = await parseSTCode(code);
+      onParsed(code, resultado);
       if (resultado.success) {
-        onLog("success", "✔ Sintaxis correcta");
+        onLog("success", "Sintaxis correcta");
       } else {
         const errores = resultado.errors ?? ["Error de parseo desconocido"];
         errores.forEach((e) => onLog("error", e));
       }
     },
-    [onLog]
+    [onLog, onParsed]
   );
 
   const handleChange: OnChange = useCallback(

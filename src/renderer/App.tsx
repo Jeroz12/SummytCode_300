@@ -5,7 +5,8 @@ import { ProjectPanel } from "../project/ProjectPanel";
 import { VariablesPanel } from "../components/VariablesPanel";
 import { ConsolePanel } from "../monitor/ConsolePanel";
 import { Toolbar } from "../components/Toolbar";
-import type { ConsoleMessage } from "../shared/types";
+import type { ConsoleMessage, ParseResult } from "../shared/types";
+import { compilarPrograma, generarCodigoC } from "./api/tauriApi";
 
 type Tab = "ladder" | "st" | "fbd";
 
@@ -32,11 +33,53 @@ export default function App() {
   const [messages, setMessages] = useState<ConsoleMessage[]>(MENSAJES_INICIALES);
   const [consoleOpen, setConsoleOpen] = useState(true);
 
+  // Último parseo del editor ST: código + resultado (AST o errores). Permite
+  // compilar sin volver a parsear — STEditor lo reporta vía onParsed.
+  const [ultimoParseo, setUltimoParseo] = useState<{ code: string; result: ParseResult } | null>(
+    null
+  );
+  const [compilando, setCompilando] = useState(false);
+
   const log = useCallback((tipo: ConsoleMessage["tipo"], texto: string) => {
     setMessages((prev) => [...prev, { id: nuevoId(), timestamp: horaActual(), tipo, texto }]);
   }, []);
 
   const limpiarConsola = useCallback(() => setMessages([]), []);
+
+  const handleParsed = useCallback((code: string, result: ParseResult) => {
+    setUltimoParseo({ code, result });
+  }, []);
+
+  const handleCompilar = useCallback(async () => {
+    if (!ultimoParseo || !ultimoParseo.result.success || !ultimoParseo.result.ast) {
+      log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
+      return;
+    }
+    const { ast } = ultimoParseo.result;
+
+    setCompilando(true);
+    try {
+      const codegen = generarCodigoC(ast);
+      if (!codegen.success || codegen.files.length === 0) {
+        codegen.errors.forEach((e) => log("error", `Error de compilación: ${e}`));
+        return;
+      }
+
+      const archivo = codegen.files[0];
+      const guardado = await compilarPrograma(archivo.contenido, archivo.nombre);
+      if (guardado.success) {
+        log("success", `Código C generado: ${guardado.path}`);
+        log("info", `${ast.variables.length} variables, ${ast.networks.length} networks procesados`);
+        codegen.warnings.forEach((w) => log("warning", w));
+      } else {
+        log("error", `Error de compilación: ${guardado.error}`);
+      }
+    } catch (e) {
+      log("error", `Error de compilación: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCompilando(false);
+    }
+  }, [ultimoParseo, log]);
 
   return (
     <div className="app">
@@ -74,7 +117,7 @@ export default function App() {
           </div>
 
           <div className="editor-area">
-            {tab === "st" && <STEditor onLog={log} />}
+            {tab === "st" && <STEditor onLog={log} onParsed={handleParsed} />}
             {tab === "ladder" && <LadderEditor />}
           </div>
         </section>
@@ -91,7 +134,7 @@ export default function App() {
       />
 
       {/* Toolbar inferior */}
-      <Toolbar />
+      <Toolbar onCompilar={handleCompilar} compilando={compilando} />
     </div>
   );
 }

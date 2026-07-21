@@ -111,4 +111,29 @@ describe("STParser", () => {
     expect(cmp.izq).toEqual({ tipo: "contacto_na", variable: "Cuenta" });
     expect(cmp.der).toEqual({ tipo: "literal", valor: 10 });
   });
+
+  // 6. Notación de punto en la salida Q de un TON: "Timer1.Q" debe parsear sin error.
+  it("parsea TON con notación de punto en Q (Timer1.Q)", () => {
+    const parser = new STParser();
+    const ast = parser.parse("TON(IN:=Motor, PT:=T#5s, Q=>Timer1.Q);");
+
+    const ton = ast.networks[0].expresiones[0] as Ton;
+    expect(ton.q_var).toBe("Timer1");
+  });
+
+  // 7. "Q=>Timer1.Q" y "Q=>Timer1" deben producir el mismo AST (el ".Q" es azúcar sintáctica).
+  it("produce el mismo AST con y sin notación de punto en Q", () => {
+    const conPunto = new STParser().parse("TON(IN:=Motor, PT:=T#5s, Q=>Timer1.Q);");
+    const sinPunto = new STParser().parse("TON(IN:=Motor, PT:=T#5s, Q=>Timer1);");
+
+    expect(conPunto).toEqual(sinPunto);
+  });
+
+  // 8. Notación de punto con campo incorrecto lanza un error descriptivo.
+  it("lanza un error si el campo tras el punto no coincide con el parámetro", () => {
+    const parser = new STParser();
+    expect(() =>
+      parser.parse("TON(IN:=Motor, PT:=T#5s, Q=>Timer1.CV);")
+    ).toThrow(/Campo 'CV' inesperado para el parámetro Q en Timer1/);
+  });
 });

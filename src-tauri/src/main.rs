@@ -11,6 +11,7 @@ fn main() {
             commands::get_serial_ports,
             commands::save_project,
             commands::load_project,
+            commands::guardar_codigo_generado,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Tauri");
