@@ -25,6 +25,7 @@
  * (Bajo el core de Arduino —que ya define main()— este main() debe excluirse.)
  */
 #include "plc_runtime.h"
+#include <avr/interrupt.h>  /* sei() lo usa plc_runtime_init(); disponible aquí también */
 
 /* Se ejecuta una vez al arrancar. */
 void setup(void) {

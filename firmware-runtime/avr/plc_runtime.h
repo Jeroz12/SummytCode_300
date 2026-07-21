@@ -44,4 +44,15 @@ void plc_read_inputs(void);
 void plc_write_outputs(void);
 void plc_program(void);
 
+/* ── HAL nativa AVR (registros directos, sin core de Arduino) ── */
+#include "hal_avr.h"
+
+/* Compatibilidad: el código generado por CGenerator usa los nombres Arduino
+   (pinMode, digitalWrite, digitalRead, analogRead) sin sufijo. Estas macros los
+   redirigen de forma transparente a la HAL nativa, sin tocar el generador. */
+#define pinMode(pin, mode)     pinMode_hal((pin), (mode))
+#define digitalWrite(pin, val) digitalWrite_hal((pin), (val))
+#define digitalRead(pin)       digitalRead_hal((pin))
+#define analogRead(pin)        analogRead_hal((pin))
+
 #endif /* PLC_RUNTIME_H */
