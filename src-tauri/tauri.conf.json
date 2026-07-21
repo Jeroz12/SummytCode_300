@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "build": {
+    "beforeDevCommand": "npm run dev:renderer",
+    "beforeBuildCommand": "npm run build:renderer",
+    "devPath": "http://localhost:5173",
+    "distDir": "../dist/renderer",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "PLC IDE",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "com.agrupacion.plcide",
+      "targets": "all",
+      "category": "DeveloperTool",
+      "shortDescription": "IDE de programación PLC para MCU",
+      "longDescription": "IDE para programar microcontroladores con lenguajes PLC (Ladder, ST)."
+    },
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "PLC IDE — Agrupación v0.1",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  }
+}

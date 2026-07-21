@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import Editor, { type OnChange } from "@monaco-editor/react";
 import type { ConsoleMessage } from "../../shared/types";
+import { parseSTCode } from "../../renderer/api/tauriApi";
 
 const CODIGO_EJEMPLO = `(* Programa de ejemplo: Control de Motor *)
 VAR
@@ -29,7 +30,7 @@ export function STEditor({ onLog }: Props) {
 
   const parsear = useCallback(
     async (code: string) => {
-      const resultado = await window.plcAPI.parseSTCode(code);
+      const resultado = await parseSTCode(code);
       if (resultado.success) {
         onLog("success", "✔ Sintaxis correcta");
       } else {

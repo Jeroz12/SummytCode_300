@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { BoardDefinition } from "../shared/types";
+import { getBoards, getSerialPorts } from "../renderer/api/tauriApi";
 
 /**
  * Barra inferior de acciones. Los botones Compilar/Flashear/Monitorear están
@@ -14,10 +15,7 @@ export function Toolbar() {
   useEffect(() => {
     let activo = true;
     void (async () => {
-      const [ports, boards] = await Promise.all([
-        window.plcAPI.getSerialPorts(),
-        window.plcAPI.getBoards(),
-      ]);
+      const [ports, boards] = await Promise.all([getSerialPorts(), getBoards()]);
       if (!activo) return;
       setPuertos(ports);
       setPuerto(ports[0] ?? "");

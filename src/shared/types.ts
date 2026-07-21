@@ -1,6 +1,6 @@
 /**
- * Contrato compartido entre el proceso main (Electron), el preload y el renderer.
- * Define la API expuesta en `window.plcAPI` y los tipos de datos que viajan por ella.
+ * Tipos de datos compartidos por el frontend.
+ * La integración con el backend vive en src/renderer/api/tauriApi.ts (Tauri).
  */
 
 // Tipo del AST reutilizado desde compiler-core (import type = se borra en runtime).
@@ -29,18 +29,3 @@ export interface ConsoleMessage {
   texto: string;
 }
 
-/** API segura expuesta al renderer a través del preload (contextBridge). */
-export interface PlcAPI {
-  /** Parsea código ST usando el STParser de compiler-core. */
-  parseSTCode(code: string): Promise<ParseResult>;
-  /** Placas disponibles (mock por ahora). */
-  getBoards(): Promise<BoardDefinition[]>;
-  /** Puertos serie disponibles (mock por ahora). */
-  getSerialPorts(): Promise<string[]>;
-}
-
-declare global {
-  interface Window {
-    plcAPI: PlcAPI;
-  }
-}
