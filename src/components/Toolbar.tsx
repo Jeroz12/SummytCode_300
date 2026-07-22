@@ -3,17 +3,24 @@ import type { BoardDefinition } from "../shared/types";
 import { getBoards, getSerialPorts } from "../renderer/api/tauriApi";
 
 interface Props {
-  /** Dispara el pipeline ST → AST → C → guardar en disco. */
-  onCompilar: () => void;
-  /** True mientras la compilación está en curso (deshabilita el botón). */
+  /** Dispara el pipeline ST → AST → C → guardar en disco → avr-gcc. Recibe el puerto elegido. */
+  onCompilar: (puerto: string) => void;
+  /** True mientras la compilación (C + avr-gcc) está en curso. */
   compilando: boolean;
+  /** Dispara el flasheo del .hex ya compilado vía avrdude. Recibe el puerto elegido. */
+  onFlashear: (puerto: string) => void;
+  /** True mientras avrdude está flasheando. */
+  flasheando: boolean;
+  /** True cuando ya existe un .hex compilado listo para flashear. */
+  firmwareListo: boolean;
 }
 
 /**
- * Barra inferior de acciones. "Compilar" ejecuta el pipeline real (ST→AST→C→disco).
- * "Flashear" y "Monitorear" siguen deshabilitados hasta que exista esa fase.
+ * Barra inferior de acciones. "Compilar" ejecuta el pipeline real (ST→AST→C→avr-gcc).
+ * "Flashear" se habilita solo tras una compilación exitosa. "Monitorear" sigue
+ * deshabilitado (fase futura).
  */
-export function Toolbar({ onCompilar, compilando }: Props) {
+export function Toolbar({ onCompilar, compilando, onFlashear, flasheando, firmwareListo }: Props) {
   const [puertos, setPuertos] = useState<string[]>([]);
   const [puerto, setPuerto] = useState<string>("");
   const [placas, setPlacas] = useState<BoardDefinition[]>([]);
@@ -37,15 +44,26 @@ export function Toolbar({ onCompilar, compilando }: Props) {
   return (
     <div className="toolbar">
       <button
-        className={`btn btn--primary ${compilando ? "btn--disabled" : ""}`}
-        onClick={onCompilar}
-        disabled={compilando}
-        title={compilando ? "Compilando…" : "Genera el código C a partir del programa actual"}
+        className={`btn btn--primary ${compilando || flasheando ? "btn--disabled" : ""}`}
+        onClick={() => onCompilar(puerto)}
+        disabled={compilando || flasheando}
+        title={compilando ? "Compilando…" : "Genera el código C y compila el firmware con avr-gcc"}
       >
         {compilando ? "⏳ Compilando…" : "▶ Compilar"}
       </button>
-      <button className="btn btn--disabled" title="Disponible próximamente" disabled>
-        ⬆ Flashear
+      <button
+        className={`btn ${firmwareListo && !flasheando && !compilando ? "" : "btn--disabled"}`}
+        onClick={() => onFlashear(puerto)}
+        disabled={!firmwareListo || flasheando || compilando}
+        title={
+          !firmwareListo
+            ? "Compila primero para habilitar el flasheo"
+            : flasheando
+              ? "Flasheando…"
+              : "Flashea el firmware compilado al Arduino Uno"
+        }
+      >
+        {flasheando ? "⏳ Flasheando…" : "⬆ Flashear"}
       </button>
       <button className="btn btn--disabled" title="Disponible próximamente" disabled>
         📡 Monitorear

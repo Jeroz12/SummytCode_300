@@ -3,10 +3,10 @@
  * La integración con el backend vive en src/renderer/api/tauriApi.ts (Tauri).
  */
 
-// Tipo del AST reutilizado desde compiler-core (import type = se borra en runtime).
-import type { Programa } from "../../compiler-core/src/ast/types";
+// Tipos del AST reutilizados desde compiler-core (import type = se borra en runtime).
+import type { Programa, VariableDeclaration } from "../../compiler-core/src/ast/types";
 
-export type { Programa };
+export type { Programa, VariableDeclaration };
 
 /** Resultado de parsear código ST vía el compiler-core. */
 export interface ParseResult {

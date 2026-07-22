@@ -1,23 +1,21 @@
-/**
- * Panel derecho: tabla de variables. Solo UI por ahora (no editable, no conectada
- * al AST). Precargada con las variables del ejemplo ST.
- */
+import { useEffect, useState } from "react";
+import type { VariableDeclaration } from "../shared/types";
 
-interface VariableFila {
-  nombre: string;
-  tipo: string;
-  clase: string;
-  direccion: string;
+interface Props {
+  /** Variables del AST parseado más reciente (vacío si aún no hay programa válido). */
+  variables: VariableDeclaration[];
+  /** Direcciones IEC asignadas desde este panel (nombre de variable → dirección). */
+  ioMappings: Record<string, string>;
+  /** Se dispara al confirmar una dirección editada (onBlur o Enter). */
+  onVariableUpdate: (nombre: string, direccion: string) => void;
 }
 
-const VARIABLES_DEMO: VariableFila[] = [
-  { nombre: "Start", tipo: "BOOL", clase: "VAR_INPUT", direccion: "%IX0.0" },
-  { nombre: "Stop", tipo: "BOOL", clase: "BOOL", direccion: "%IX0.1" },
-  { nombre: "Motor", tipo: "BOOL", clase: "VAR_OUTPUT", direccion: "%QX0.0" },
-  { nombre: "Timer1", tipo: "TON", clase: "VAR", direccion: "—" },
-];
-
-export function VariablesPanel() {
+/**
+ * Panel derecho: tabla de variables del programa actual (Opción B — mapeo de I/O
+ * desde la UI, sin tocar el código ST). Nombre/Tipo/Clase vienen del AST y son de
+ * solo lectura; Dirección es editable y alimenta `generarCodigoC` vía ioMappings.
+ */
+export function VariablesPanel({ variables, ioMappings, onVariableUpdate }: Props) {
   return (
     <aside className="panel panel--right">
       <div className="panel__header">Variables</div>
@@ -32,14 +30,27 @@ export function VariablesPanel() {
           </tr>
         </thead>
         <tbody>
-          {VARIABLES_DEMO.map((v) => (
-            <tr key={v.nombre}>
-              <td>{v.nombre}</td>
-              <td>{v.tipo}</td>
-              <td>{v.clase}</td>
-              <td className="tag">{v.direccion}</td>
+          {variables.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="var-table__vacio">
+                Sin variables — escribe código ST válido para verlas aquí
+              </td>
             </tr>
-          ))}
+          ) : (
+            variables.map((v) => (
+              <tr key={v.nombre}>
+                <td>{v.nombre}</td>
+                <td>{v.tipo}</td>
+                <td>{v.clase}</td>
+                <td className="tag">
+                  <DireccionInput
+                    valor={ioMappings[v.nombre] ?? v.direccion_iec ?? ""}
+                    onCommit={(direccion) => onVariableUpdate(v.nombre, direccion)}
+                  />
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 
@@ -47,5 +58,40 @@ export function VariablesPanel() {
         + Agregar variable
       </button>
     </aside>
+  );
+}
+
+interface DireccionInputProps {
+  valor: string;
+  onCommit: (valor: string) => void;
+}
+
+/** Input de texto controlado para una celda de "Dirección"; confirma con blur o Enter. */
+function DireccionInput({ valor, onCommit }: DireccionInputProps) {
+  const [texto, setTexto] = useState(valor);
+
+  // Si la dirección cambia por fuera (ej. nuevo parseo), sincroniza el input.
+  useEffect(() => {
+    setTexto(valor);
+  }, [valor]);
+
+  const confirmar = () => {
+    if (texto !== valor) onCommit(texto);
+  };
+
+  return (
+    <input
+      className="var-table__input"
+      value={texto}
+      placeholder="%IX0.0"
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          confirmar();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
   );
 }

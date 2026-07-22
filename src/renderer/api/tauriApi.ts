@@ -24,11 +24,32 @@ export async function parseSTCode(code: string): Promise<ParseResult> {
 }
 
 /**
- * Genera código C (target Arduino Uno) a partir del AST ya parseado.
+ * Aplica las direcciones IEC elegidas en el panel de Variables (Parte 3, Opción B)
+ * a las variables del AST, sin mutar el original. `mappings` es nombre de
+ * variable → dirección IEC (ej. `{ Start: "%IX0.0" }`); una entrada ausente o
+ * vacía conserva la `direccion_iec` que ya traía la variable (si la tenía).
+ */
+function aplicarIOMappings(ast: Programa, mappings: Record<string, string>): Programa {
+  return {
+    ...ast,
+    variables: ast.variables.map((v) => ({
+      ...v,
+      direccion_iec: mappings[v.nombre] || v.direccion_iec,
+    })),
+  };
+}
+
+/**
+ * Genera código C (target Arduino Uno) a partir del AST ya parseado, aplicando
+ * primero el mapeo de I/O elegido en el panel de Variables.
  * Corre en el renderer (Opción A), igual que `parseSTCode`: es JS puro, sin I/O.
  */
-export function generarCodigoC(ast: Programa): CodegenResult {
-  return new CGenerator().generate(ast, arduinoUnoBoard, avrAtmega328Target);
+export function generarCodigoC(
+  ast: Programa,
+  ioMappings: Record<string, string> = {}
+): CodegenResult {
+  const programaConDirecciones = aplicarIOMappings(ast, ioMappings);
+  return new CGenerator().generate(programaConDirecciones, arduinoUnoBoard, avrAtmega328Target);
 }
 
 /** Placas disponibles (comando Rust `get_boards`). */
@@ -72,6 +93,47 @@ export async function compilarPrograma(
       contenido: codigoC,
     });
     return { success: true, path };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+/** Resultado de compilar el firmware AVR (avr-gcc). */
+export interface CompilarAvrResult {
+  success: boolean;
+  hexPath?: string;
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Compila `generated/plc_program.c` + el runtime AVR a `.hex` con avr-gcc
+ * (comando Rust `compilar_avr`). No requiere el Arduino conectado.
+ */
+export async function compilarAvr(puerto: string): Promise<CompilarAvrResult> {
+  try {
+    const hexPath = await invoke<string>("compilar_avr", { puerto });
+    return { success: true, hexPath };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+/** Resultado de flashear el firmware al MCU (avrdude). */
+export interface FlashearAvrResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Flashea `generated/build/plc_firmware.hex` al Arduino Uno vía avrdude
+ * (comando Rust `flashear_avr`). Requiere el Arduino conectado en `puerto`.
+ */
+export async function flashearAvr(puerto: string): Promise<FlashearAvrResult> {
+  try {
+    const output = await invoke<string>("flashear_avr", { puerto });
+    return { success: true, output };
   } catch (e) {
     return { success: false, error: String(e) };
   }

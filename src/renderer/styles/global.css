@@ -262,6 +262,30 @@ body {
   font-family: "Cascadia Code", "Consolas", monospace;
   color: var(--accent);
 }
+.var-table__vacio {
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: normal;
+  padding: 16px 8px;
+}
+.var-table__input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--accent);
+}
+.var-table__input:hover {
+  border-color: var(--border);
+}
+.var-table__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+}
 
 .btn-ghost {
   margin: 10px 12px;

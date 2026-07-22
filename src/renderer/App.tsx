@@ -5,8 +5,8 @@ import { ProjectPanel } from "../project/ProjectPanel";
 import { VariablesPanel } from "../components/VariablesPanel";
 import { ConsolePanel } from "../monitor/ConsolePanel";
 import { Toolbar } from "../components/Toolbar";
-import type { ConsoleMessage, ParseResult } from "../shared/types";
-import { compilarPrograma, generarCodigoC } from "./api/tauriApi";
+import type { ConsoleMessage, ParseResult, VariableDeclaration } from "../shared/types";
+import { compilarAvr, compilarPrograma, flashearAvr, generarCodigoC } from "./api/tauriApi";
 
 type Tab = "ladder" | "st" | "fbd";
 
@@ -39,6 +39,14 @@ export default function App() {
     null
   );
   const [compilando, setCompilando] = useState(false);
+  const [flasheando, setFlasheando] = useState(false);
+  // True una vez que avr-gcc produjo generated/build/plc_firmware.hex con éxito.
+  const [firmwareListoParaFlashear, setFirmwareListoParaFlashear] = useState(false);
+
+  // Variables del último AST válido, mostradas en el panel derecho (Parte 3).
+  const [variables, setVariables] = useState<VariableDeclaration[]>([]);
+  // Direcciones IEC asignadas desde el panel de Variables: nombre → "%IX0.0".
+  const [ioMappings, setIoMappings] = useState<Record<string, string>>({});
 
   const log = useCallback((tipo: ConsoleMessage["tipo"], texto: string) => {
     setMessages((prev) => [...prev, { id: nuevoId(), timestamp: horaActual(), tipo, texto }]);
@@ -48,38 +56,76 @@ export default function App() {
 
   const handleParsed = useCallback((code: string, result: ParseResult) => {
     setUltimoParseo({ code, result });
+    if (result.success && result.ast) {
+      setVariables(result.ast.variables);
+    }
   }, []);
 
-  const handleCompilar = useCallback(async () => {
-    if (!ultimoParseo || !ultimoParseo.result.success || !ultimoParseo.result.ast) {
-      log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
-      return;
-    }
-    const { ast } = ultimoParseo.result;
+  const handleVariableUpdate = useCallback((nombre: string, direccion: string) => {
+    setIoMappings((prev) => ({ ...prev, [nombre]: direccion }));
+  }, []);
 
-    setCompilando(true);
-    try {
-      const codegen = generarCodigoC(ast);
-      if (!codegen.success || codegen.files.length === 0) {
-        codegen.errors.forEach((e) => log("error", `Error de compilación: ${e}`));
+  const handleCompilar = useCallback(
+    async (puerto: string) => {
+      if (!ultimoParseo || !ultimoParseo.result.success || !ultimoParseo.result.ast) {
+        log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
         return;
       }
+      const { ast } = ultimoParseo.result;
 
-      const archivo = codegen.files[0];
-      const guardado = await compilarPrograma(archivo.contenido, archivo.nombre);
-      if (guardado.success) {
+      setCompilando(true);
+      setFirmwareListoParaFlashear(false);
+      try {
+        const codegen = generarCodigoC(ast, ioMappings);
+        if (!codegen.success || codegen.files.length === 0) {
+          codegen.errors.forEach((e) => log("error", `Error de compilación: ${e}`));
+          return;
+        }
+
+        const archivo = codegen.files[0];
+        const guardado = await compilarPrograma(archivo.contenido, archivo.nombre);
+        if (!guardado.success) {
+          log("error", `Error de compilación: ${guardado.error}`);
+          return;
+        }
         log("success", `Código C generado: ${guardado.path}`);
         log("info", `${ast.variables.length} variables, ${ast.networks.length} networks procesados`);
         codegen.warnings.forEach((w) => log("warning", w));
-      } else {
-        log("error", `Error de compilación: ${guardado.error}`);
+
+        // ST/Ladder → C ya está en disco; ahora avr-gcc lo compila a .hex.
+        const compiladoAvr = await compilarAvr(puerto);
+        if (compiladoAvr.success) {
+          log("success", `Firmware compilado: ${compiladoAvr.hexPath}`);
+          setFirmwareListoParaFlashear(true);
+        } else {
+          log("error", `Error de compilación AVR: ${compiladoAvr.error}`);
+        }
+      } catch (e) {
+        log("error", `Error de compilación: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setCompilando(false);
       }
-    } catch (e) {
-      log("error", `Error de compilación: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setCompilando(false);
-    }
-  }, [ultimoParseo, log]);
+    },
+    [ultimoParseo, ioMappings, log]
+  );
+
+  const handleFlashear = useCallback(
+    async (puerto: string) => {
+      setFlasheando(true);
+      try {
+        const resultado = await flashearAvr(puerto);
+        if (resultado.success) {
+          log("success", "Firmware flasheado correctamente al Arduino Uno");
+          if (resultado.output) log("info", resultado.output);
+        } else {
+          log("error", `Error al flashear: ${resultado.error}`);
+        }
+      } finally {
+        setFlasheando(false);
+      }
+    },
+    [log]
+  );
 
   return (
     <div className="app">
@@ -122,7 +168,11 @@ export default function App() {
           </div>
         </section>
 
-        <VariablesPanel />
+        <VariablesPanel
+          variables={variables}
+          ioMappings={ioMappings}
+          onVariableUpdate={handleVariableUpdate}
+        />
       </div>
 
       {/* Consola inferior (colapsable) */}
@@ -134,7 +184,13 @@ export default function App() {
       />
 
       {/* Toolbar inferior */}
-      <Toolbar onCompilar={handleCompilar} compilando={compilando} />
+      <Toolbar
+        onCompilar={handleCompilar}
+        compilando={compilando}
+        onFlashear={handleFlashear}
+        flasheando={flasheando}
+        firmwareListo={firmwareListoParaFlashear}
+      />
     </div>
   );
 }
