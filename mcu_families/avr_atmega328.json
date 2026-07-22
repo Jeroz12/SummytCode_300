@@ -1,0 +1,38 @@
+{
+  "familia_id": "avr_atmega328",
+  "nombre_visible": "AVR ATmega328P",
+  "arquitectura": "avr",
+  "toolchain": {
+    "compilador": "avr-gcc",
+    "flags_base": [
+      "-mmcu=atmega328p",
+      "-DF_CPU=16000000UL",
+      "-Os",
+      "-std=c11",
+      "-Wall",
+      "-ffunction-sections",
+      "-fdata-sections"
+    ],
+    "flags_enlazado": ["-mmcu=atmega328p", "-Wl,--gc-sections"],
+    "objcopy_formato": "ihex"
+  },
+  "metodo_flasheo": {
+    "herramienta": "avrdude",
+    "programador": "arduino",
+    "baudrate": 115200,
+    "flags_extra": ["-v"]
+  },
+  "capacidades": {
+    "flash_kb": 32,
+    "ram_kb": 2,
+    "gpio_digital": true,
+    "adc": { "resolucion_bits": 10, "canales_max": 6 },
+    "pwm": { "canales_max": 6, "resolucion_bits": 8 },
+    "comunicacion": ["usart", "spi", "i2c"],
+    "timers_hw": 3
+  },
+  "restricciones": {
+    "ram_reservada_runtime_bytes": 256,
+    "flash_reservada_bootloader_kb": 2
+  }
+}

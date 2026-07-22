@@ -1,0 +1,31 @@
+{
+  "board_id": "agrupacion_board_v1",
+  "hereda_de": "stm32f1",
+  "nombre_visible": "Placa Agrupación V1",
+  "descripcion": "Placa personalizada de la agrupación basada en STM32F103C8T6",
+  "imagen": "agrupacion_board_v1.svg",
+  "canales_io": [
+    {
+      "_comentario": "Completar con los pines reales de la PCB",
+      "direccion_iec": "%IX0.0",
+      "tipo": "BOOL",
+      "modo": "input",
+      "pin_fisico": "PA0",
+      "etiqueta_serigrafia": "IN1",
+      "electrico": { "voltaje": "24V", "opto_aislado": true }
+    },
+    {
+      "direccion_iec": "%QX0.0",
+      "tipo": "BOOL",
+      "modo": "output",
+      "pin_fisico": "PB0",
+      "etiqueta_serigrafia": "OUT1",
+      "electrico": { "tipo_salida": "rele", "corriente_max_A": 2 }
+    }
+  ],
+  "comunicacion": {
+    "programacion": "usb_dfu",
+    "monitoreo": "uart1",
+    "futuro": ["rs485", "ethernet"]
+  }
+}

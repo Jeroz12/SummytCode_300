@@ -6,7 +6,7 @@
 //! src-tauri/README.md).
 
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Rutas absolutas al toolchain AVR empaquetado con Arduino IDE (verificadas en
@@ -139,6 +139,48 @@ pub fn guardar_proyecto_en_ruta(ruta: String, contenido: String) -> Result<(), S
 #[tauri::command]
 pub fn exit_app() {
     std::process::exit(0);
+}
+
+/// Lee todos los archivos `boards/*.json` (definiciones de placa, §7.2) y retorna
+/// su contenido crudo como strings; el parseo a `BoardDefinitionFull` lo hace el
+/// frontend (Rust no necesita conocer la forma del JSON, solo leerlo del disco).
+///
+/// Excluye archivos de plantilla (nombre contiene "template", ej.
+/// `agrupacion_board_template.json`) ANTES de leerlos: el `board_id` que llevan
+/// adentro (ej. `"agrupacion_board_v1"`) no necesariamente contiene la palabra
+/// "template", así que filtrar por ese campo en el frontend no es confiable. El
+/// nombre de archivo sí es la señal real de que es una plantilla para rellenar.
+#[tauri::command]
+pub async fn listar_boards() -> Result<Vec<String>, String> {
+    let boards_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("boards");
+
+    let mut boards = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&boards_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let es_json = path.extension().map_or(false, |e| e == "json");
+            let es_template = path
+                .file_stem()
+                .map_or(false, |s| s.to_string_lossy().contains("template"));
+            if es_json && !es_template {
+                if let Ok(contenido) = std::fs::read_to_string(&path) {
+                    boards.push(contenido);
+                }
+            }
+        }
+    }
+    Ok(boards)
+}
+
+/// Lee `mcu_families/{familia_id}.json` (definición de familia de MCU, §7.1).
+#[tauri::command]
+pub async fn leer_familia(familia_id: String) -> Result<String, String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("mcu_families")
+        .join(format!("{}.json", familia_id));
+
+    std::fs::read_to_string(&path).map_err(|e| format!("No se encontró la familia '{}': {}", familia_id, e))
 }
 
 /// Raíz del proyecto (la carpeta que contiene src-tauri/, generated/, firmware-runtime/).

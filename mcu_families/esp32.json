@@ -1,0 +1,36 @@
+{
+  "familia_id": "esp32",
+  "nombre_visible": "ESP32 (Xtensa LX6)",
+  "arquitectura": "xtensa-lx6",
+  "toolchain": {
+    "compilador": "xtensa-esp32-elf-gcc",
+    "flags_base": [
+      "-mlongcalls",
+      "-Os",
+      "-std=c11",
+      "-Wall",
+      "-ffunction-sections",
+      "-fdata-sections"
+    ],
+    "flags_enlazado": ["-mlongcalls", "-Wl,--gc-sections"],
+    "objcopy_formato": "ihex"
+  },
+  "metodo_flasheo": {
+    "herramienta": "esptool.py",
+    "baudrate": 460800,
+    "flags_extra": ["--chip", "esp32", "write_flash", "0x10000"]
+  },
+  "capacidades": {
+    "flash_kb": 4096,
+    "ram_kb": 520,
+    "gpio_digital": true,
+    "adc": { "resolucion_bits": 12, "canales_max": 18 },
+    "pwm": { "canales_max": 16, "resolucion_bits": 16 },
+    "comunicacion": ["usart", "spi", "i2c", "can", "wifi", "bluetooth"],
+    "timers_hw": 4
+  },
+  "restricciones": {
+    "ram_reservada_runtime_bytes": 2048,
+    "flash_reservada_bootloader_kb": 64
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "familia_id": "stm32f1",
+  "nombre_visible": "STM32F1 (Cortex-M3)",
+  "arquitectura": "arm-cortex-m3",
+  "toolchain": {
+    "compilador": "arm-none-eabi-gcc",
+    "flags_base": [
+      "-mcpu=cortex-m3",
+      "-mthumb",
+      "-Os",
+      "-std=c11",
+      "-Wall",
+      "-ffunction-sections",
+      "-fdata-sections"
+    ],
+    "flags_enlazado": [
+      "-mcpu=cortex-m3",
+      "-mthumb",
+      "-Wl,--gc-sections"
+    ],
+    "objcopy_formato": "ihex"
+  },
+  "metodo_flasheo": {
+    "herramienta": "STM32_Programmer_CLI",
+    "flags_extra": ["-c", "port=SWD", "-rst"]
+  },
+  "capacidades": {
+    "flash_kb": 64,
+    "ram_kb": 20,
+    "gpio_digital": true,
+    "adc": { "resolucion_bits": 12, "canales_max": 10 },
+    "pwm": { "canales_max": 4, "resolucion_bits": 16 },
+    "comunicacion": ["usart", "spi", "i2c", "can"],
+    "timers_hw": 4
+  },
+  "restricciones": {
+    "ram_reservada_runtime_bytes": 512,
+    "flash_reservada_bootloader_kb": 4
+  }
+}

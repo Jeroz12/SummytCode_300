@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { BoardDefinition } from "../shared/types";
-import { getBoards, getSerialPorts } from "../renderer/api/tauriApi";
+import type { BoardDefinition, BoardDefinitionFull, McuFamily } from "../shared/types";
+import { getBoards, getSerialPorts, leerFamilia, listarBoards } from "../renderer/api/tauriApi";
 
 interface Props {
   /** Dispara el pipeline ST → AST → C → guardar en disco → avr-gcc. Recibe el puerto elegido. */
@@ -13,6 +13,13 @@ interface Props {
   flasheando: boolean;
   /** True cuando ya existe un .hex compilado listo para flashear. */
   firmwareListo: boolean;
+  /**
+   * Se dispara cuando el usuario elige una placa cuyo JSON real (boards/*.json)
+   * se pudo cargar y su familia (mcu_families/*.json) se pudo leer. No se llama
+   * si solo hay placas mock disponibles (fallback), ya que esas no traen
+   * `canales_io` reales con los que generar C.
+   */
+  onBoardChange?: (board: BoardDefinitionFull, familia: McuFamily) => void;
 }
 
 /**
@@ -20,26 +27,73 @@ interface Props {
  * "Flashear" se habilita solo tras una compilación exitosa. "Monitorear" sigue
  * deshabilitado (fase futura).
  */
-export function Toolbar({ onCompilar, compilando, onFlashear, flasheando, firmwareListo }: Props) {
+export function Toolbar({
+  onCompilar,
+  compilando,
+  onFlashear,
+  flasheando,
+  firmwareListo,
+  onBoardChange,
+}: Props) {
   const [puertos, setPuertos] = useState<string[]>([]);
   const [puerto, setPuerto] = useState<string>("");
-  const [placas, setPlacas] = useState<BoardDefinition[]>([]);
+  // Placas reales leídas de boards/*.json (vacío si aún no cargaron o falló la lectura).
+  const [placasReales, setPlacasReales] = useState<BoardDefinitionFull[]>([]);
+  // Fallback mock (comando `get_boards`) — solo se usa si `placasReales` queda vacío.
+  const [placasMock, setPlacasMock] = useState<BoardDefinition[]>([]);
   const [placa, setPlaca] = useState<string>("");
+
+  const placas: { board_id: string; nombre_visible: string }[] =
+    placasReales.length > 0 ? placasReales : placasMock;
 
   useEffect(() => {
     let activo = true;
     void (async () => {
-      const [ports, boards] = await Promise.all([getSerialPorts(), getBoards()]);
+      const [ports, boardsMock, boardsReales] = await Promise.all([
+        getSerialPorts(),
+        getBoards(),
+        listarBoards().catch(() => []),
+      ]);
       if (!activo) return;
       setPuertos(ports);
       setPuerto(ports[0] ?? "");
-      setPlacas(boards);
-      setPlaca(boards[0]?.board_id ?? "");
+      setPlacasMock(boardsMock);
+      setPlacasReales(boardsReales);
+
+      const lista = boardsReales.length > 0 ? boardsReales : boardsMock;
+      // Arduino Uno como selección por defecto si está disponible.
+      const porDefecto = lista.find((b) => b.board_id === "arduino_uno") ?? lista[0];
+      setPlaca(porDefecto?.board_id ?? "");
+
+      if (boardsReales.length > 0 && porDefecto) {
+        const board = boardsReales.find((b) => b.board_id === porDefecto.board_id);
+        if (board) {
+          try {
+            const familia = await leerFamilia(board.hereda_de);
+            if (activo) onBoardChange?.(board, familia);
+          } catch {
+            // Sin familia legible: se deja sin seleccionar boards reales (compilar fallará con mensaje claro).
+          }
+        }
+      }
     })();
     return () => {
       activo = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleCambiarPlaca = async (boardId: string) => {
+    setPlaca(boardId);
+    const board = placasReales.find((b) => b.board_id === boardId);
+    if (!board) return; // solo hay mock disponible: nada que emitir
+    try {
+      const familia = await leerFamilia(board.hereda_de);
+      onBoardChange?.(board, familia);
+    } catch {
+      // familia no encontrada: se ignora, el usuario verá el error real al compilar
+    }
+  };
 
   return (
     <div className="toolbar">
@@ -84,7 +138,11 @@ export function Toolbar({ onCompilar, compilando, onFlashear, flasheando, firmwa
 
       <label className="field">
         Placa:
-        <select className="select" value={placa} onChange={(e) => setPlaca(e.target.value)}>
+        <select
+          className="select"
+          value={placa}
+          onChange={(e) => void handleCambiarPlaca(e.target.value)}
+        >
           {placas.map((b) => (
             <option key={b.board_id} value={b.board_id}>
               {b.nombre_visible}

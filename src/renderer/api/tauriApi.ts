@@ -8,9 +8,14 @@
  */
 import { invoke } from "@tauri-apps/api/tauri";
 import { CGenerator, STParser, avrAtmega328Target } from "../../../compiler-core/src";
-import type { CodegenResult, Programa } from "../../../compiler-core/src";
-import type { BoardDefinition, ParseResult, PlcProject } from "../../shared/types";
-import { arduinoUnoBoard } from "../boards/arduinoUnoBoard";
+import type { BoardJson, CodegenResult, Programa } from "../../../compiler-core/src";
+import type {
+  BoardDefinition,
+  BoardDefinitionFull,
+  McuFamily,
+  ParseResult,
+  PlcProject,
+} from "../../shared/types";
 
 /** Parsea código ST en el propio renderer (no pasa por Rust). */
 export async function parseSTCode(code: string): Promise<ParseResult> {
@@ -40,16 +45,37 @@ function aplicarIOMappings(ast: Programa, mappings: Record<string, string>): Pro
 }
 
 /**
- * Genera código C (target Arduino Uno) a partir del AST ya parseado, aplicando
- * primero el mapeo de I/O elegido en el panel de Variables.
+ * Convierte un `BoardDefinitionFull` (boards/*.json, §7.2) al subset `BoardJson`
+ * que espera `CGenerator` — el codegen no necesita campos como `electrico` o
+ * `comunicacion`, solo direccion_iec/pin_fisico/etiqueta por canal.
+ */
+function convertirBoardABoardJson(board: BoardDefinitionFull): BoardJson {
+  return {
+    board_id: board.board_id,
+    canales_io: board.canales_io.map((c) => ({
+      direccion_iec: c.direccion_iec,
+      tipo: c.tipo,
+      modo: c.modo === "input_analog" ? "input" : c.modo,
+      pin_fisico: c.pin_fisico,
+      etiqueta_serigrafia: c.etiqueta_serigrafia,
+    })),
+  };
+}
+
+/**
+ * Genera código C a partir del AST ya parseado, aplicando primero el mapeo de I/O
+ * elegido en el panel de Variables y usando la placa seleccionada en la Toolbar
+ * (ya no un `BoardJson` hardcodeado).
  * Corre en el renderer (Opción A), igual que `parseSTCode`: es JS puro, sin I/O.
  */
 export function generarCodigoC(
   ast: Programa,
-  ioMappings: Record<string, string> = {}
+  ioMappings: Record<string, string>,
+  board: BoardDefinitionFull
 ): CodegenResult {
   const programaConDirecciones = aplicarIOMappings(ast, ioMappings);
-  return new CGenerator().generate(programaConDirecciones, arduinoUnoBoard, avrAtmega328Target);
+  const boardJson = convertirBoardABoardJson(board);
+  return new CGenerator().generate(programaConDirecciones, boardJson, avrAtmega328Target);
 }
 
 /** Placas disponibles (comando Rust `get_boards`). */
@@ -187,4 +213,32 @@ export async function abrirProyecto(): Promise<AbrirProyectoResult | null> {
 /** Cierra la aplicación (comando Rust `exit_app`). */
 export async function salirApp(): Promise<void> {
   await invoke("exit_app");
+}
+
+// ── Boards / familias de MCU (§7.1, §7.2) ───────────────────────────────────
+
+/**
+ * Lee todas las placas reales de `boards/*.json` (comando Rust `listar_boards`).
+ * Descarta entradas que no parsean como JSON válido y las plantillas (board_id
+ * contiene "template", ej. `agrupacion_board_template.json`), que existen solo
+ * como punto de partida para diseñar placas nuevas y no son seleccionables.
+ */
+export async function listarBoards(): Promise<BoardDefinitionFull[]> {
+  const jsons = await invoke<string[]>("listar_boards");
+  return jsons
+    .map((json) => {
+      try {
+        return JSON.parse(json) as BoardDefinitionFull;
+      } catch {
+        return null;
+      }
+    })
+    .filter((b): b is BoardDefinitionFull => b !== null)
+    .filter((b) => !b.board_id.includes("template"));
+}
+
+/** Lee `mcu_families/{familiaId}.json` (comando Rust `leer_familia`). */
+export async function leerFamilia(familiaId: string): Promise<McuFamily> {
+  const json = await invoke<string>("leer_familia", { familiaId });
+  return JSON.parse(json) as McuFamily;
 }

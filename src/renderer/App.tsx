@@ -7,7 +7,14 @@ import { VariablesPanel } from "../components/VariablesPanel";
 import { ConsolePanel } from "../monitor/ConsolePanel";
 import { Toolbar } from "../components/Toolbar";
 import { FileMenu } from "../components/FileMenu";
-import type { ConsoleMessage, ParseResult, PlcProject, VariableDeclaration } from "../shared/types";
+import type {
+  BoardDefinitionFull,
+  ConsoleMessage,
+  McuFamily,
+  ParseResult,
+  PlcProject,
+  VariableDeclaration,
+} from "../shared/types";
 import {
   abrirProyecto,
   compilarAvr,
@@ -65,6 +72,16 @@ export default function App() {
   const [variables, setVariables] = useState<VariableDeclaration[]>([]);
   // Direcciones IEC asignadas desde el panel de Variables: nombre → "%IX0.0".
   const [ioMappings, setIoMappings] = useState<Record<string, string>>({});
+
+  // Placa seleccionada en la Toolbar (boards/*.json real) + su familia de MCU
+  // (mcu_families/*.json). null hasta que Toolbar termina de cargarlas.
+  const [boardSeleccionada, setBoardSeleccionada] = useState<BoardDefinitionFull | null>(null);
+  const [familiaSeleccionada, setFamiliaSeleccionada] = useState<McuFamily | null>(null);
+
+  const handleBoardChange = useCallback((board: BoardDefinitionFull, familia: McuFamily) => {
+    setBoardSeleccionada(board);
+    setFamiliaSeleccionada(familia);
+  }, []);
 
   // ── Estado del proyecto (.plcproj) ──
   // Texto ST actual (fresco, sin debounce) — lo que se guardaría al proyecto.
@@ -240,12 +257,16 @@ export default function App() {
         log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
         return;
       }
+      if (!boardSeleccionada) {
+        log("error", "No se puede compilar: no hay ninguna placa real cargada (boards/*.json).");
+        return;
+      }
       const { ast } = ultimoParseo.result;
 
       setCompilando(true);
       setFirmwareListoParaFlashear(false);
       try {
-        const codegen = generarCodigoC(ast, ioMappings);
+        const codegen = generarCodigoC(ast, ioMappings, boardSeleccionada);
         if (!codegen.success || codegen.files.length === 0) {
           codegen.errors.forEach((e) => log("error", `Error de compilación: ${e}`));
           return;
@@ -275,7 +296,7 @@ export default function App() {
         setCompilando(false);
       }
     },
-    [ultimoParseo, ioMappings, log]
+    [ultimoParseo, ioMappings, boardSeleccionada, log]
   );
 
   const handleFlashear = useCallback(
@@ -374,6 +395,7 @@ export default function App() {
         onFlashear={handleFlashear}
         flasheando={flasheando}
         firmwareListo={firmwareListoParaFlashear}
+        onBoardChange={handleBoardChange}
       />
     </div>
   );
