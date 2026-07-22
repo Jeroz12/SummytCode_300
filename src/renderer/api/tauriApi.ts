@@ -9,7 +9,7 @@
 import { invoke } from "@tauri-apps/api/tauri";
 import { CGenerator, STParser, avrAtmega328Target } from "../../../compiler-core/src";
 import type { CodegenResult, Programa } from "../../../compiler-core/src";
-import type { BoardDefinition, ParseResult } from "../../shared/types";
+import type { BoardDefinition, ParseResult, PlcProject } from "../../shared/types";
 import { arduinoUnoBoard } from "../boards/arduinoUnoBoard";
 
 /** Parsea código ST en el propio renderer (no pasa por Rust). */
@@ -137,4 +137,54 @@ export async function flashearAvr(puerto: string): Promise<FlashearAvrResult> {
   } catch (e) {
     return { success: false, error: String(e) };
   }
+}
+
+// ── Proyectos .plcproj ──────────────────────────────────────────────────────
+
+/**
+ * Abre el diálogo "Guardar como" y escribe el proyecto en la ruta elegida.
+ * Retorna la ruta guardada, o `null` si el usuario canceló.
+ */
+export async function guardarProyecto(proyecto: PlcProject): Promise<string | null> {
+  const json = JSON.stringify(proyecto, null, 2);
+  try {
+    return await invoke<string | null>("dialogo_guardar_proyecto", { contenido: json });
+  } catch (e) {
+    throw new Error(`Error guardando proyecto: ${e}`);
+  }
+}
+
+/** Escribe el proyecto directamente en una ruta ya conocida (sin diálogo). */
+export async function guardarProyectoEnRuta(ruta: string, proyecto: PlcProject): Promise<void> {
+  const json = JSON.stringify(proyecto, null, 2);
+  try {
+    await invoke<void>("guardar_proyecto_en_ruta", { ruta, contenido: json });
+  } catch (e) {
+    throw new Error(`Error guardando proyecto: ${e}`);
+  }
+}
+
+/** Resultado de abrir un proyecto: el proyecto parseado + la ruta de donde se abrió. */
+export interface AbrirProyectoResult {
+  proyecto: PlcProject;
+  ruta: string;
+}
+
+/**
+ * Abre el diálogo "Abrir", lee el .plcproj elegido y lo parsea.
+ * Retorna el proyecto + su ruta (para "Guardar" sin diálogo), o `null` si canceló.
+ */
+export async function abrirProyecto(): Promise<AbrirProyectoResult | null> {
+  try {
+    const res = await invoke<{ ruta: string; contenido: string } | null>("dialogo_abrir_proyecto");
+    if (!res) return null;
+    return { proyecto: JSON.parse(res.contenido) as PlcProject, ruta: res.ruta };
+  } catch (e) {
+    throw new Error(`Error abriendo proyecto: ${e}`);
+  }
+}
+
+/** Cierra la aplicación (comando Rust `exit_app`). */
+export async function salirApp(): Promise<void> {
+  await invoke("exit_app");
 }

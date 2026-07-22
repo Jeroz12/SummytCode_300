@@ -14,6 +14,10 @@ fn main() {
             commands::guardar_codigo_generado,
             commands::compilar_avr,
             commands::flashear_avr,
+            commands::dialogo_guardar_proyecto,
+            commands::dialogo_abrir_proyecto,
+            commands::guardar_proyecto_en_ruta,
+            commands::exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error al iniciar la aplicación Tauri");

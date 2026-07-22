@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef } from "react";
-import Editor, { type OnChange } from "@monaco-editor/react";
+import Editor, { loader, type OnChange } from "@monaco-editor/react";
+// Import "core-only": `monaco-editor` (barril completo) arrastra ~80 lenguajes y
+// workers de TS/CSS/HTML/JSON de varios MB cada uno. ST es "plaintext" — no
+// necesitamos ninguno de esos. `editor.api` es el punto de entrada oficial sin
+// contribuciones de lenguaje, documentado por Monaco para este caso de uso.
+import * as monaco from "monaco-editor/editor/editor.api";
 import type { ConsoleMessage, ParseResult } from "../../shared/types";
 import { parseSTCode } from "../../renderer/api/tauriApi";
 
-const CODIGO_EJEMPLO = `(* Programa de ejemplo: Control de Motor *)
+// Usa el Monaco bundleado localmente por Vite (vite-plugin-monaco-editor), no el
+// CDN por defecto de @monaco-editor/react — el aula puede no tener internet.
+loader.config({ monaco });
+
+export const CODIGO_EJEMPLO = `(* Programa de ejemplo: Control de Motor *)
 VAR
   Start   : BOOL;
   Stop    : BOOL;
@@ -25,9 +34,21 @@ interface Props {
   onLog: (tipo: ConsoleMessage["tipo"], texto: string) => void;
   /** Reporta el código y el resultado de cada parseo (para que App.tsx pueda compilar sin re-parsear). */
   onParsed: (code: string, result: ParseResult) => void;
+  /**
+   * Reporta CADA cambio de texto sin debounce (a diferencia de onParsed). Se usa
+   * para guardar el proyecto con el contenido más fresco y para marcar "cambios
+   * sin guardar" de inmediato, sin esperar los 800ms del parseo.
+   */
+  onChangeImmediate: (code: string) => void;
+  /**
+   * Código con el que se monta el editor (proyecto abierto, nuevo proyecto vacío,
+   * o el ejemplo por defecto). Solo se usa al MONTAR: para reemplazarlo después
+   * hay que remontar el componente (ej. cambiando su `key` en App.tsx).
+   */
+  initialCode?: string;
 }
 
-export function STEditor({ onLog, onParsed }: Props) {
+export function STEditor({ onLog, onParsed, onChangeImmediate, initialCode = CODIGO_EJEMPLO }: Props) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const parsear = useCallback(
@@ -46,16 +67,17 @@ export function STEditor({ onLog, onParsed }: Props) {
 
   const handleChange: OnChange = useCallback(
     (value) => {
-      if (timer.current) clearTimeout(timer.current);
       const code = value ?? "";
+      onChangeImmediate(code);
+      if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void parsear(code), DEBOUNCE_MS);
     },
-    [parsear]
+    [parsear, onChangeImmediate]
   );
 
-  // Parseo inicial del código de ejemplo al montar (una sola vez).
+  // Parseo inicial del código con el que se monta el editor (una sola vez).
   useEffect(() => {
-    void parsear(CODIGO_EJEMPLO);
+    void parsear(initialCode);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
@@ -67,7 +89,7 @@ export function STEditor({ onLog, onParsed }: Props) {
       height="100%"
       defaultLanguage="plaintext"
       theme="vs-dark"
-      defaultValue={CODIGO_EJEMPLO}
+      defaultValue={initialCode}
       onChange={handleChange}
       options={{
         fontSize: 14,

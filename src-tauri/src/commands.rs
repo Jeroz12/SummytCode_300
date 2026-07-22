@@ -56,6 +56,91 @@ pub fn load_project(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Abre un diálogo "Guardar como" y escribe `contenido` (JSON del .plcproj) en la
+/// ruta elegida. Retorna la ruta guardada, o `None` si el usuario canceló.
+///
+/// Usa la variante NO bloqueante de `FileDialogBuilder` (`tauri::api::dialog`, no
+/// `dialog::blocking`): la versión blocking congela el hilo del comando (y con él
+/// la ventana, en Windows) hasta que el usuario cierra el diálogo. Aquí el diálogo
+/// se muestra en el hilo principal vía callback y el `async fn` solo espera el
+/// resultado por un canal, sin bloquear nada.
+#[tauri::command]
+pub async fn dialogo_guardar_proyecto(contenido: String) -> Result<Option<String>, String> {
+    use tauri::api::dialog::FileDialogBuilder;
+    use tokio::sync::oneshot;
+
+    let (tx, rx) = oneshot::channel();
+    FileDialogBuilder::new()
+        .set_title("Guardar proyecto")
+        .add_filter("Proyecto PLC", &["plcproj"])
+        .set_file_name("mi_proyecto.plcproj")
+        .save_file(move |ruta| {
+            let _ = tx.send(ruta);
+        });
+
+    let ruta = rx.await.map_err(|e| e.to_string())?;
+
+    match ruta {
+        Some(path) => {
+            std::fs::write(&path, contenido).map_err(|e| format!("Error guardando: {}", e))?;
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        None => Ok(None), // el usuario canceló
+    }
+}
+
+/// Contenido de un proyecto abierto + la ruta de la que se leyó (para permitir
+/// "Guardar" sin volver a mostrar el diálogo).
+#[derive(Serialize)]
+pub struct ProyectoAbierto {
+    pub ruta: String,
+    pub contenido: String,
+}
+
+/// Abre un diálogo "Abrir", lee el .plcproj elegido y retorna su ruta + contenido.
+/// Retorna `None` si el usuario canceló. No bloqueante (ver nota en
+/// `dialogo_guardar_proyecto`).
+#[tauri::command]
+pub async fn dialogo_abrir_proyecto() -> Result<Option<ProyectoAbierto>, String> {
+    use tauri::api::dialog::FileDialogBuilder;
+    use tokio::sync::oneshot;
+
+    let (tx, rx) = oneshot::channel();
+    FileDialogBuilder::new()
+        .set_title("Abrir proyecto")
+        .add_filter("Proyecto PLC", &["plcproj"])
+        .pick_file(move |ruta| {
+            let _ = tx.send(ruta);
+        });
+
+    let ruta = rx.await.map_err(|e| e.to_string())?;
+
+    match ruta {
+        Some(path) => {
+            let contenido =
+                std::fs::read_to_string(&path).map_err(|e| format!("Error leyendo: {}", e))?;
+            Ok(Some(ProyectoAbierto {
+                ruta: path.to_string_lossy().to_string(),
+                contenido,
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Escribe el .plcproj directamente en una ruta ya conocida (sin diálogo).
+/// Se usa para "Guardar" cuando el proyecto ya fue abierto o guardado antes.
+#[tauri::command]
+pub fn guardar_proyecto_en_ruta(ruta: String, contenido: String) -> Result<(), String> {
+    std::fs::write(&ruta, contenido).map_err(|e| format!("Error guardando: {}", e))
+}
+
+/// Cierra la aplicación.
+#[tauri::command]
+pub fn exit_app() {
+    std::process::exit(0);
+}
+
 /// Raíz del proyecto (la carpeta que contiene src-tauri/, generated/, firmware-runtime/).
 ///
 /// Se calcula desde `CARGO_MANIFEST_DIR` (constante de compilación, siempre
