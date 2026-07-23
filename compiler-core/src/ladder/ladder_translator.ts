@@ -25,77 +25,27 @@ const enSerie = (izq: Expresion, der: Expresion): Expresion => ({ tipo: "and", i
 const enParalelo = (izq: Expresion, der: Expresion): Expresion => ({ tipo: "or", izq, der });
 
 /** Un contacto sin lógica previa se energiza siempre (rung "cerrado"). */
-const SIEMPRE_VERDADERO: Expresion = { tipo: "literal", valor: true };
+export const SIEMPRE_VERDADERO: Expresion = { tipo: "literal", valor: true };
+
+/** Condición que nunca se energiza (para un CTU sin Reset: "nunca resetea"). */
+export const SIEMPRE_FALSO: Expresion = { tipo: "literal", valor: false };
+
+/**
+ * Forma mínima de una salida (bobina/bloque) para construir un Network: no
+ * necesita `id`/`posicion`, solo tipo + variable + parámetros. Tanto el modelo
+ * topológico `LadderElemento` como el `ElementoLadder` del árbol la satisfacen.
+ */
+export type SalidaAST = Pick<LadderElemento, "tipo" | "variable" | "parametros">;
 
 /**
  * Traduce un programa Ladder completo al AST `Programa`.
  * Cada `LadderRung` produce un `Network`.
  */
 export function traducirLadderAAST(programa: LadderPrograma): Programa {
-  const networks: Network[] = [];
-
-  for (const rung of programa.rungs) {
-    const expresiones: Expresion[] = [];
-
+  const networks = programa.rungs.map((rung) =>
     // 1. Lógica de entrada del rung: OR de ramas, cada rama es un AND de contactos.
-    const logica = construirLogicaDeRamas(rung.ramas);
-
-    // Para bobinas SET/RESET (que en el AST no llevan condición propia), la
-    // lógica se antepone una sola vez como expresión líder del network.
-    let liderIncluido = false;
-    const asegurarLider = (): void => {
-      if (!liderIncluido && logica) {
-        expresiones.unshift(logica);
-        liderIncluido = true;
-      }
-    };
-
-    // 2. Conectar la lógica a cada salida.
-    for (const salida of rung.salidas) {
-      switch (salida.tipo) {
-        case "bobina":
-          expresiones.push({
-            tipo: "asignacion",
-            variable: salida.variable,
-            valor: logica ?? SIEMPRE_VERDADERO,
-          });
-          break;
-
-        case "bobina_negada":
-          expresiones.push({
-            tipo: "asignacion",
-            variable: salida.variable,
-            valor: { tipo: "not", operando: logica ?? SIEMPRE_VERDADERO },
-          });
-          break;
-
-        case "bobina_set":
-          asegurarLider();
-          expresiones.push({ tipo: "bobina_s", variable: salida.variable });
-          break;
-
-        case "bobina_reset":
-          asegurarLider();
-          expresiones.push({ tipo: "bobina_r", variable: salida.variable });
-          break;
-
-        case "ton":
-          expresiones.push(construirTon(salida, logica));
-          break;
-
-        case "ctu":
-          expresiones.push(construirCtu(salida, logica));
-          break;
-
-        default:
-          throw new Error(
-            `El elemento '${salida.tipo}' no es una salida válida de un rung (se esperaba bobina, bobina_negada, bobina_set, bobina_reset, ton o ctu)`
-          );
-      }
-    }
-
-    networks.push({ id: rung.id, expresiones });
-  }
+    construirNetwork(rung.id, construirLogicaDeRamas(rung.ramas), rung.salidas)
+  );
 
   return {
     nombre: programa.nombre,
@@ -103,6 +53,77 @@ export function traducirLadderAAST(programa: LadderPrograma): Programa {
     networks,
     lenguaje_fuente: "ladder",
   };
+}
+
+/**
+ * Construye UN `Network` a partir de la lógica de entrada ya calculada
+ * (`logica`) y las salidas del rung. Es el punto común de los dos frontends de
+ * Ladder: el modelo topológico (`LadderRung.ramas` → `construirLogicaDeRamas`) y
+ * el modelo de árbol (`RedContactos` → `redAExpresion`). La lógica de conectar
+ * cada bobina/bloque a la expresión de entrada es idéntica en ambos.
+ */
+export function construirNetwork(
+  id: number,
+  logica: Expresion | null,
+  salidas: SalidaAST[]
+): Network {
+  const expresiones: Expresion[] = [];
+
+  // Para bobinas SET/RESET (que en el AST no llevan condición propia), la
+  // lógica se antepone una sola vez como expresión líder del network.
+  let liderIncluido = false;
+  const asegurarLider = (): void => {
+    if (!liderIncluido && logica) {
+      expresiones.unshift(logica);
+      liderIncluido = true;
+    }
+  };
+
+  // Conectar la lógica a cada salida.
+  for (const salida of salidas) {
+    switch (salida.tipo) {
+      case "bobina":
+        expresiones.push({
+          tipo: "asignacion",
+          variable: salida.variable,
+          valor: logica ?? SIEMPRE_VERDADERO,
+        });
+        break;
+
+      case "bobina_negada":
+        expresiones.push({
+          tipo: "asignacion",
+          variable: salida.variable,
+          valor: { tipo: "not", operando: logica ?? SIEMPRE_VERDADERO },
+        });
+        break;
+
+      case "bobina_set":
+        asegurarLider();
+        expresiones.push({ tipo: "bobina_s", variable: salida.variable });
+        break;
+
+      case "bobina_reset":
+        asegurarLider();
+        expresiones.push({ tipo: "bobina_r", variable: salida.variable });
+        break;
+
+      case "ton":
+        expresiones.push(construirTon(salida, logica));
+        break;
+
+      case "ctu":
+        expresiones.push(construirCtu(salida, logica));
+        break;
+
+      default:
+        throw new Error(
+          `El elemento '${salida.tipo}' no es una salida válida de un rung (se esperaba bobina, bobina_negada, bobina_set, bobina_reset, ton o ctu)`
+        );
+    }
+  }
+
+  return { id, expresiones };
 }
 
 // --- Helpers -------------------------------------------------------------
@@ -145,7 +166,7 @@ function elementoAContacto(el: LadderElemento): Expresion {
  * la misma expresión AND/OR que se usa para una bobina. Ya no hay caso especial
  * para "un solo contacto" — el AST acepta cualquier `Expresion`.
  */
-function construirTon(el: LadderElemento, logica: Expresion | null): Ton {
+function construirTon(el: SalidaAST, logica: Expresion | null): Ton {
   const p = el.parametros ?? {};
   if (p.pt_ms === undefined) {
     throw new Error(`El TON '${el.variable}' requiere 'parametros.pt_ms'`);
@@ -167,7 +188,7 @@ function construirTon(el: LadderElemento, logica: Expresion | null): Ton {
  * a nivel de dibujo, un único nombre de variable (`parametros.reset_var`) que se
  * envuelve en un contacto NA para producir una `Expresion` del AST.
  */
-function construirCtu(el: LadderElemento, logica: Expresion | null): Ctu {
+function construirCtu(el: SalidaAST, logica: Expresion | null): Ctu {
   const p = el.parametros ?? {};
   if (p.pv === undefined) {
     throw new Error(`El CTU '${el.variable}' requiere 'parametros.pv'`);
@@ -175,13 +196,13 @@ function construirCtu(el: LadderElemento, logica: Expresion | null): Ctu {
   if (!p.q_var) {
     throw new Error(`El CTU '${el.variable}' requiere 'parametros.q_var'`);
   }
-  if (!p.reset_var) {
-    throw new Error(`El CTU '${el.variable}' requiere 'parametros.reset_var'`);
-  }
+  // Reset es OPCIONAL (v1: sin popover que fuerce a completarlo): si no se
+  // definió, el CTU simplemente nunca se resetea (condición SIEMPRE_FALSO) en
+  // vez de romper la compilación. `advertenciasCanvas` avisa de esto sin bloquear.
   return {
     tipo: "ctu",
     cu: logica ?? SIEMPRE_VERDADERO,
-    reset: { tipo: "contacto_na", variable: p.reset_var },
+    reset: p.reset_var ? { tipo: "contacto_na", variable: p.reset_var } : SIEMPRE_FALSO,
     pv: p.pv,
     q_var: p.q_var,
     cv_var: p.cv_var,

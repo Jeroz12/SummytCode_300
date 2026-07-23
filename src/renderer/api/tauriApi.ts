@@ -7,14 +7,22 @@
  * se usa para lo que toca el sistema operativo: puertos serie, archivos, procesos.
  */
 import { invoke } from "@tauri-apps/api/tauri";
-import { CGenerator, STParser, avrAtmega328Target } from "../../../compiler-core/src";
-import type { BoardJson, CodegenResult, Programa } from "../../../compiler-core/src";
+import {
+  CGenerator,
+  STParser,
+  avrAtmega328Target,
+  traducirArbolAAST,
+} from "../../../compiler-core/src";
+
+export { advertenciasArbol } from "../../../compiler-core/src";
+import type { BoardJson, CodegenResult, Programa, ProgramaArbol } from "../../../compiler-core/src";
 import type {
   BoardDefinition,
   BoardDefinitionFull,
   McuFamily,
   ParseResult,
   PlcProject,
+  VariableDeclaration,
 } from "../../shared/types";
 
 /** Parsea código ST en el propio renderer (no pasa por Rust). */
@@ -76,6 +84,22 @@ export function generarCodigoC(
   const programaConDirecciones = aplicarIOMappings(ast, ioMappings);
   const boardJson = convertirBoardABoardJson(board);
   return new CGenerator().generate(programaConDirecciones, boardJson, avrAtmega328Target);
+}
+
+/**
+ * Genera código C desde el editor Ladder: traduce el ÁRBOL de rungs al mismo AST
+ * que ST y reutiliza `generarCodigoC`. `variables` son las declaraciones IEC
+ * (del panel) que el programa Ladder referencia.
+ */
+export function generarCodigoCDesdeLadder(
+  programaArbol: ProgramaArbol,
+  variables: VariableDeclaration[],
+  ioMappings: Record<string, string>,
+  board: BoardDefinitionFull,
+  nombre = "LadderProgram"
+): CodegenResult {
+  const ast = traducirArbolAAST(programaArbol, variables, nombre);
+  return generarCodigoC(ast, ioMappings, board);
 }
 
 /** Placas disponibles (comando Rust `get_boards`). */

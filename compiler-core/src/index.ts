@@ -6,6 +6,14 @@ export * from "./ast/types";
 export { STParser } from "./parsers/st_parser";
 export * from "./ladder/types";
 export { traducirLadderAAST } from "./ladder/ladder_translator";
+// Modelo de árbol recursivo (reemplaza la grilla RungCanvas + marcadores ⊢/⊣).
+export * from "./ladder/network_tree";
+export {
+  traducirArbolAAST,
+  advertenciasArbol,
+  redAExpresion,
+  recolectarSalidas,
+} from "./ladder/arbol_translator";
 
 // Codegen (AST → C)
 export { CGenerator } from "./codegen/c_generator";

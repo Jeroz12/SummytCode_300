@@ -4,9 +4,10 @@
  */
 
 // Tipos del AST reutilizados desde compiler-core (import type = se borra en runtime).
-import type { Programa, VariableDeclaration } from "../../compiler-core/src/ast/types";
+import type { ClaseVariable, Programa, TipoDato, VariableDeclaration } from "../../compiler-core/src/ast/types";
+import type { ProgramaArbol } from "../../compiler-core/src/ladder/network_tree";
 
-export type { Programa, VariableDeclaration };
+export type { ClaseVariable, Programa, TipoDato, VariableDeclaration, ProgramaArbol };
 
 /** Resultado de parsear código ST vía el compiler-core. */
 export interface ParseResult {
@@ -96,7 +97,24 @@ export interface PlcProject {
   programa: {
     lenguaje_fuente: "st" | "ladder";
     codigo_st: string; // el texto completo del editor ST
+    /**
+     * Estado del editor Ladder (árbol recursivo de rungs). Opcional; se persiste
+     * solo cuando el proyecto se editó en modo Ladder.
+     *
+     * NOTA DE FORMATO: a partir de la migración al modelo de árbol (network_tree)
+     * este campo YA NO es compatible con los .plcproj viejos basados en grilla
+     * (RungCanvas + marcadores ⊢/⊣). No se incluye migración automática (uso
+     * interno/educativo): un .plcproj antiguo con `ladder_canvas` de grilla se
+     * ignora y se arranca con un rung vacío (ver App.openProject).
+     */
+    ladder_canvas?: ProgramaArbol;
   };
   io_mappings: Record<string, string>; // { "Start": "%IX0.0", ... }
+  /**
+   * Variables agregadas a mano desde el panel de Variables (no vienen del AST
+   * parseado del código ST). Opcional para no romper la compatibilidad con
+   * proyectos .plcproj guardados antes de que existiera esta funcionalidad.
+   */
+  variables_manuales?: VariableDeclaration[];
 }
 

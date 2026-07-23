@@ -20,6 +20,13 @@ interface Props {
    * `canales_io` reales con los que generar C.
    */
   onBoardChange?: (board: BoardDefinitionFull, familia: McuFamily) => void;
+  /**
+   * True si la familia de la placa seleccionada tiene pipeline de compilación
+   * real hoy (solo AVR). El botón "Compilar" no se deshabilita cuando es
+   * `false` — se deja intentar a propósito para que el usuario vea el error
+   * educativo en consola en vez de encontrarse un botón muerto sin explicación.
+   */
+  familiaSoportada?: boolean;
 }
 
 /**
@@ -34,6 +41,7 @@ export function Toolbar({
   flasheando,
   firmwareListo,
   onBoardChange,
+  familiaSoportada = true,
 }: Props) {
   const [puertos, setPuertos] = useState<string[]>([]);
   const [puerto, setPuerto] = useState<string>("");
@@ -101,7 +109,13 @@ export function Toolbar({
         className={`btn btn--primary ${compilando || flasheando ? "btn--disabled" : ""}`}
         onClick={() => onCompilar(puerto)}
         disabled={compilando || flasheando}
-        title={compilando ? "Compilando…" : "Genera el código C y compila el firmware con avr-gcc"}
+        title={
+          compilando
+            ? "Compilando…"
+            : !familiaSoportada
+              ? "Esta familia de MCU no está disponible aún"
+              : "Genera el código C y compila el firmware con avr-gcc"
+        }
       >
         {compilando ? "⏳ Compilando…" : "▶ Compilar"}
       </button>

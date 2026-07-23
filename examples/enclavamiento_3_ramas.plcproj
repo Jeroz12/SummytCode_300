@@ -1,0 +1,44 @@
+{
+  "proyecto": {
+    "nombre": "Enclavamiento 3 ramas",
+    "target": "arduino_uno",
+    "version_formato": "1.0",
+    "fecha_modificacion": "2026-07-22T00:00:00.000Z"
+  },
+  "programa": {
+    "lenguaje_fuente": "ladder",
+    "codigo_st": "",
+    "ladder_canvas": {
+      "rungs": [
+        {
+          "id": 1,
+          "filas": 4,
+          "columnas": 8,
+          "celdas": [
+            { "fila": 0, "columna": 0, "elemento": { "tipo": "branch_open", "variable": "" } },
+            { "fila": 0, "columna": 0, "elemento": { "tipo": "branch_open", "variable": "" } },
+            { "fila": 0, "columna": 2, "elemento": { "tipo": "branch_close", "variable": "" } },
+            { "fila": 0, "columna": 2, "elemento": { "tipo": "branch_close", "variable": "" } },
+            { "fila": 0, "columna": 3, "elemento": { "tipo": "contacto_nc", "variable": "Stop" } },
+            { "fila": 0, "columna": 4, "elemento": { "tipo": "bobina", "variable": "Motor" } },
+            { "fila": 0, "columna": 1, "elemento": { "tipo": "contacto_na", "variable": "Start" } },
+            { "fila": 1, "columna": 1, "elemento": { "tipo": "contacto_na", "variable": "Motor" } },
+            { "fila": 2, "columna": 1, "elemento": { "tipo": "contacto_na", "variable": "Manual" } }
+          ]
+        }
+      ]
+    }
+  },
+  "io_mappings": {
+    "Start": "%IX0.0",
+    "Manual": "%IX0.1",
+    "Stop": "%IX0.2",
+    "Motor": "%QX0.0"
+  },
+  "variables_manuales": [
+    { "nombre": "Start", "tipo": "BOOL", "clase": "VAR_INPUT" },
+    { "nombre": "Manual", "tipo": "BOOL", "clase": "VAR_INPUT" },
+    { "nombre": "Stop", "tipo": "BOOL", "clase": "VAR_INPUT" },
+    { "nombre": "Motor", "tipo": "BOOL", "clase": "VAR_OUTPUT" }
+  ]
+}
