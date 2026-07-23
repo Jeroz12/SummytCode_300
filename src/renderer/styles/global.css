@@ -778,6 +778,48 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* ---------------- Banner de desincronización ST/Ladder ---------------- */
+
+.sync-warning-banner {
+  background: #fff3cd;
+  border-top: 1px solid #ffe69c;
+  border-bottom: 1px solid #ffe69c;
+  color: #664d03;
+}
+
+.sync-warning-banner__content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+.sync-warning-banner__text {
+  flex: 1 1 auto;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sync-warning-banner__btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid #d1a53d;
+  border-radius: 4px;
+  background: #ffe69c;
+  color: #664d03;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sync-warning-banner__btn:hover {
+  background: #ffdd80;
+}
+.sync-warning-banner__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ---------------- Toolbar inferior ---------------- */
 
 .toolbar {

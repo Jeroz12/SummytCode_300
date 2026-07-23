@@ -10,6 +10,7 @@ import { ConsolePanel } from "../monitor/ConsolePanel";
 import { Toolbar } from "../components/Toolbar";
 import { FileMenu } from "../components/FileMenu";
 import { EditMenu } from "../components/EditMenu";
+import { SyncWarningBanner } from "../components/SyncWarningBanner";
 import type {
   BoardDefinitionFull,
   ConsoleMessage,
@@ -19,6 +20,7 @@ import type {
   ProgramaArbol,
   VariableDeclaration,
 } from "../shared/types";
+import { simpleHash, detectarDesincronizacion } from "../shared/syncUtils";
 import {
   abrirProyecto,
   advertenciasArbol,
@@ -30,6 +32,7 @@ import {
   guardarProyecto,
   guardarProyectoEnRuta,
   salirApp,
+  getSerialPorts,
 } from "./api/tauriApi";
 
 type Tab = "ladder" | "st" | "fbd";
@@ -42,6 +45,23 @@ const LIMITE_HISTORIAL_LADDER = 50;
 
 // Ítems del menú posteriores a "Archivo"/"Editar" (aún placeholders).
 const MENU_ITEMS_RESTANTES = ["Ver", "Programa", "Comunicación", "Ayuda"];
+
+/** Serializa el programa Ladder a string para hasheo. */
+function serializarProgramaLadder(programa: ProgramaArbol): string {
+  return JSON.stringify(programa);
+}
+
+/**
+ * Obtiene el contenido del lenguaje especificado para hashear.
+ * Para ST: el código texto; para Ladder: la serialización JSON.
+ */
+function obtenerContenidoParaHashear(
+  lenguaje: "st" | "ladder",
+  codigoSt: string,
+  programaLadder: ProgramaArbol
+): string {
+  return lenguaje === "st" ? codigoSt : serializarProgramaLadder(programaLadder);
+}
 
 /**
  * Chequeo estructural de que un `ladder_canvas` cargado es un ÁRBOL válido
@@ -136,6 +156,19 @@ export default function App() {
   // Se incrementa para forzar el remontaje del editor al abrir/nuevo proyecto
   // (STEditor solo lee initialCode al montar).
   const [editorKey, setEditorKey] = useState<number>(0);
+  // Hash del último contenido compilado exitosamente (para detectar desincronización).
+  const [hashCompilado, setHashCompilado] = useState<{ lenguaje: "st" | "ladder"; hash: string } | undefined>();
+  // Estado actual de desincronización (derivado).
+  const [desincronizacion, setDesincronizacion] = useState(() =>
+    detectarDesincronizacion("st", CODIGO_EJEMPLO)
+  );
+
+  // Actualizar desincronización cuando cambia el lenguaje, contenido o hashCompilado.
+  useEffect(() => {
+    const lenguajeActual = tab === "ladder" ? "ladder" : "st";
+    const contenido = obtenerContenidoParaHashear(lenguajeActual, codigoActual, programaCanvas);
+    setDesincronizacion(detectarDesincronizacion(lenguajeActual, contenido, hashCompilado));
+  }, [tab, codigoActual, programaCanvas, hashCompilado]);
 
   const log = useCallback((tipo: ConsoleMessage["tipo"], texto: string) => {
     setMessages((prev) => [...prev, { id: nuevoId(), timestamp: horaActual(), tipo, texto }]);
@@ -242,8 +275,9 @@ export default function App() {
       },
       io_mappings: ioMappings,
       variables_manuales: variablesManuales,
+      hashCompilado,
     }),
-    [codigoActual, programaCanvas, tab, ioMappings, variablesManuales]
+    [codigoActual, programaCanvas, tab, ioMappings, variablesManuales, hashCompilado]
   );
 
   const handleGuardarComoProyecto = useCallback(async () => {
@@ -294,6 +328,7 @@ export default function App() {
     setVariablesManuales([]);
     setUltimoParseo(null);
     setFirmwareListoParaFlashear(false);
+    setHashCompilado(undefined);
     setRutaProyecto(null);
     setNombreProyecto("Nuevo proyecto");
     setProyectoModificado(false);
@@ -322,6 +357,7 @@ export default function App() {
       if (proyecto.programa.lenguaje_fuente === "ladder") setTab("ladder");
       setIoMappings(proyecto.io_mappings ?? {});
       setVariablesManuales(proyecto.variables_manuales ?? []);
+      setHashCompilado(proyecto.hashCompilado);
       setFirmwareListoParaFlashear(false);
       setEditorKey((k) => k + 1); // remonta el editor con el código cargado
       setRutaProyecto(ruta);
@@ -455,6 +491,11 @@ export default function App() {
         if (compiladoAvr.success) {
           log("success", `Firmware compilado: ${compiladoAvr.hexPath}`);
           setFirmwareListoParaFlashear(true);
+          // Guardar hash del contenido compilado para detectar futuros cambios.
+          const lenguajeActual = tab === "ladder" ? "ladder" : "st";
+          const contenido = obtenerContenidoParaHashear(lenguajeActual, codigoActual, programaCanvas);
+          const hash = simpleHash(contenido);
+          setHashCompilado({ lenguaje: lenguajeActual, hash });
         } else {
           log("error", `Error de compilación AVR: ${compiladoAvr.error}`);
         }
@@ -466,6 +507,7 @@ export default function App() {
     },
     [
       tab,
+      codigoActual,
       programaCanvas,
       variablesManuales,
       nombreProyecto,
@@ -476,6 +518,21 @@ export default function App() {
       log,
     ]
   );
+
+  // Wrapper para compilar desde el banner de desincronización (sin puerto
+  // específico: usa el primero disponible, igual que la Toolbar al montar).
+  const handleCompilarDesdeWarning = useCallback(async () => {
+    try {
+      const puertos = await getSerialPorts();
+      if (puertos.length === 0) {
+        log("error", "No hay puertos seriales disponibles. Conecta el Arduino Uno.");
+        return;
+      }
+      void handleCompilar(puertos[0]);
+    } catch (e) {
+      log("error", e instanceof Error ? e.message : String(e));
+    }
+  }, [handleCompilar, log]);
 
   const handleFlashear = useCallback(
     async (puerto: string) => {
@@ -579,6 +636,13 @@ export default function App() {
         open={consoleOpen}
         onToggle={() => setConsoleOpen((o) => !o)}
         onClear={limpiarConsola}
+      />
+
+      {/* Banner de advertencia de desincronización ST/Ladder (sobre la Toolbar) */}
+      <SyncWarningBanner
+        sincro={desincronizacion}
+        onCompilar={handleCompilarDesdeWarning}
+        compilando={compilando}
       />
 
       {/* Toolbar inferior */}

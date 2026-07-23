@@ -116,5 +116,14 @@ export interface PlcProject {
    * proyectos .plcproj guardados antes de que existiera esta funcionalidad.
    */
   variables_manuales?: VariableDeclaration[];
+  /**
+   * Hash del último contenido compilado exitosamente. Permite detectar
+   * desincronización cuando el usuario cambia de lenguaje o edita el código
+   * después de compilar. Opcional.
+   */
+  hashCompilado?: {
+    lenguaje: "st" | "ladder";
+    hash: string;
+  };
 }
 
