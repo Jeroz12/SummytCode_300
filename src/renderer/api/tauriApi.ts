@@ -12,6 +12,7 @@ import {
   STParser,
   avrAtmega328Target,
   traducirArbolAAST,
+  validarRung,
 } from "../../../compiler-core/src";
 
 export { advertenciasArbol } from "../../../compiler-core/src";
@@ -90,6 +91,13 @@ export function generarCodigoC(
  * Genera código C desde el editor Ladder: traduce el ÁRBOL de rungs al mismo AST
  * que ST y reutiliza `generarCodigoC`. `variables` son las declaraciones IEC
  * (del panel) que el programa Ladder referencia.
+ *
+ * ANTES de traducir, valida la TOPOLOGÍA de cada rung (`validarRung`, en
+ * compiler-core). Si algún rung tiene errores (rung vacío, sin salida, salida
+ * sin condición) se ABORTA sin llamar a `traducirArbolAAST`: se devuelve
+ * `success: false` con los mensajes formateados (❌/⚠️ + número de rung) en
+ * `errors`/`warnings`, listos para loguearse en la Consola tal como ya hace
+ * `App.tsx` con el resultado de `generarCodigoC`.
  */
 export function generarCodigoCDesdeLadder(
   programaArbol: ProgramaArbol,
@@ -98,8 +106,27 @@ export function generarCodigoCDesdeLadder(
   board: BoardDefinitionFull,
   nombre = "LadderProgram"
 ): CodegenResult {
+  const erroresValidacion: string[] = [];
+  const warningsValidacion: string[] = [];
+
+  programaArbol.rungs.forEach((rung) => {
+    for (const hallazgo of validarRung(rung)) {
+      const linea = `Rung ${rung.id}: ${hallazgo.mensaje}`;
+      if (hallazgo.nivel === "error") {
+        erroresValidacion.push(`❌ ${linea}`);
+      } else {
+        warningsValidacion.push(`⚠️ ${linea}`);
+      }
+    }
+  });
+
+  if (erroresValidacion.length > 0) {
+    return { success: false, files: [], errors: erroresValidacion, warnings: warningsValidacion };
+  }
+
   const ast = traducirArbolAAST(programaArbol, variables, nombre);
-  return generarCodigoC(ast, ioMappings, board);
+  const resultado = generarCodigoC(ast, ioMappings, board);
+  return { ...resultado, warnings: [...warningsValidacion, ...resultado.warnings] };
 }
 
 /** Placas disponibles (comando Rust `get_boards`). */

@@ -14,6 +14,9 @@ export {
   redAExpresion,
   recolectarSalidas,
 } from "./ladder/arbol_translator";
+// Validación topológica de rungs (antes de compilar).
+export { validarRung } from "./ladder/validar_rung";
+export type { ErrorValidacion, NivelValidacion } from "./ladder/validar_rung";
 
 // Codegen (AST → C)
 export { CGenerator } from "./codegen/c_generator";
