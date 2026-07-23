@@ -2,25 +2,31 @@ import { useCallback, useEffect, useState } from "react";
 import { appWindow } from "@tauri-apps/api/window";
 import { CODIGO_EJEMPLO, STEditor } from "../editors/st/STEditor";
 import { LadderEditor } from "../editors/ladder/LadderEditor";
+import { programaArbolEjemplo, programaArbolInicial } from "../editors/ladder/types_canvas";
+import type { RungArbol } from "../editors/ladder/types_canvas";
 import { ProjectPanel } from "../project/ProjectPanel";
 import { VariablesPanel } from "../components/VariablesPanel";
 import { ConsolePanel } from "../monitor/ConsolePanel";
 import { Toolbar } from "../components/Toolbar";
 import { FileMenu } from "../components/FileMenu";
+import { EditMenu } from "../components/EditMenu";
 import type {
   BoardDefinitionFull,
   ConsoleMessage,
   McuFamily,
   ParseResult,
   PlcProject,
+  ProgramaArbol,
   VariableDeclaration,
 } from "../shared/types";
 import {
   abrirProyecto,
+  advertenciasArbol,
   compilarAvr,
   compilarPrograma,
   flashearAvr,
   generarCodigoC,
+  generarCodigoCDesdeLadder,
   guardarProyecto,
   guardarProyectoEnRuta,
   salirApp,
@@ -28,8 +34,26 @@ import {
 
 type Tab = "ladder" | "st" | "fbd";
 
-// Ítems del menú posteriores a "Archivo" (aún placeholders).
-const MENU_ITEMS_RESTANTES = ["Editar", "Ver", "Programa", "Comunicación", "Ayuda"];
+// Familias de MCU con pipeline de compilación real hoy (solo AVR ATmega328P).
+const FAMILIAS_SOPORTADAS = ["avr_atmega328"];
+
+// Máximo de snapshots retenidos en el historial de undo del editor Ladder.
+const LIMITE_HISTORIAL_LADDER = 50;
+
+// Ítems del menú posteriores a "Archivo"/"Editar" (aún placeholders).
+const MENU_ITEMS_RESTANTES = ["Ver", "Programa", "Comunicación", "Ayuda"];
+
+/**
+ * Chequeo estructural de que un `ladder_canvas` cargado es un ÁRBOL válido
+ * (`rungs[].red`), no una grilla vieja (`rungs[].celdas`). Sin migración: los
+ * .plcproj de grilla se descartan (ver nota en shared/types.ts).
+ */
+function esProgramaArbol(x: unknown): x is ProgramaArbol {
+  if (!x || typeof x !== "object" || !Array.isArray((x as ProgramaArbol).rungs)) return false;
+  const rungs = (x as ProgramaArbol).rungs;
+  // Un programa vacío (0 rungs) es válido; si hay rungs, el primero debe tener `red`.
+  return rungs.length === 0 || (typeof rungs[0] === "object" && "red" in (rungs[0] as object));
+}
 
 /** Deriva un nombre legible de proyecto desde la ruta del archivo .plcproj. */
 function nombreDesdeRuta(ruta: string): string {
@@ -70,6 +94,15 @@ export default function App() {
 
   // Variables del último AST válido, mostradas en el panel derecho (Parte 3).
   const [variables, setVariables] = useState<VariableDeclaration[]>([]);
+  // Variables agregadas a mano desde el panel: alimentan el codegen del editor
+  // Ladder (ver handleCompilar, tab === "ladder"). Arrancan con las variables
+  // del rung de ejemplo (programaArbolEjemplo) para que compile de inmediato,
+  // igual que CODIGO_EJEMPLO ya se auto-declara sus propias VAR en el editor ST.
+  const [variablesManuales, setVariablesManuales] = useState<VariableDeclaration[]>([
+    { nombre: "Start", tipo: "BOOL", clase: "VAR_INPUT" },
+    { nombre: "Sensor1", tipo: "BOOL", clase: "VAR_INPUT" },
+    { nombre: "Motor", tipo: "BOOL", clase: "VAR_OUTPUT" },
+  ]);
   // Direcciones IEC asignadas desde el panel de Variables: nombre → "%IX0.0".
   const [ioMappings, setIoMappings] = useState<Record<string, string>>({});
 
@@ -86,6 +119,16 @@ export default function App() {
   // ── Estado del proyecto (.plcproj) ──
   // Texto ST actual (fresco, sin debounce) — lo que se guardaría al proyecto.
   const [codigoActual, setCodigoActual] = useState<string>(CODIGO_EJEMPLO);
+  // Estado del editor Ladder (árbol de rungs, controlado desde aquí igual que el
+  // texto ST). Arranca con el rung de ejemplo (programaArbolEjemplo); "Nuevo
+  // proyecto" y el fallback al abrir un .plcproj sin ladder usan
+  // `programaArbolInicial()` (un rung vacío).
+  const [programaCanvas, setProgramaCanvas] = useState<ProgramaArbol>(programaArbolEjemplo());
+  // Undo/redo del editor Ladder: stacks de snapshots del array `rungs` (shallow;
+  // el árbol ya es inmutable, así que basta guardar la referencia anterior). El
+  // editor ST NO usa esto — tiene su propio undo nativo vía Monaco.
+  const [historialLadder, setHistorialLadder] = useState<RungArbol[][]>([]);
+  const [futuroLadder, setFuturoLadder] = useState<RungArbol[][]>([]);
   // Ruta del archivo abierto/guardado (para "Guardar" sin diálogo). null = nuevo.
   const [rutaProyecto, setRutaProyecto] = useState<string | null>(null);
   const [nombreProyecto, setNombreProyecto] = useState<string>("Nuevo proyecto");
@@ -113,8 +156,63 @@ export default function App() {
     setProyectoModificado(true);
   }, []);
 
+  // Wrapper de toda mutación del árbol Ladder: apila el estado ANTERIOR en el
+  // historial (recortado a LIMITE_HISTORIAL_LADDER), limpia el futuro (una nueva
+  // edición invalida cualquier redo pendiente) y aplica el nuevo estado.
+  const handleLadderChange = useCallback(
+    (programa: ProgramaArbol) => {
+      setHistorialLadder((h) => {
+        const next = [...h, programaCanvas.rungs];
+        return next.length > LIMITE_HISTORIAL_LADDER
+          ? next.slice(next.length - LIMITE_HISTORIAL_LADDER)
+          : next;
+      });
+      setFuturoLadder([]);
+      setProgramaCanvas(programa);
+      setProyectoModificado(true);
+    },
+    [programaCanvas]
+  );
+
+  // Undo (Ctrl+Z): saca el último snapshot del historial y lo restaura, empujando
+  // el estado actual al futuro para poder rehacerlo.
+  const deshacerLadder = useCallback(() => {
+    if (historialLadder.length === 0) return;
+    const previo = historialLadder[historialLadder.length - 1];
+    setHistorialLadder((h) => h.slice(0, -1));
+    setFuturoLadder((f) => [...f, programaCanvas.rungs]);
+    setProgramaCanvas({ rungs: previo });
+    setProyectoModificado(true);
+  }, [historialLadder, programaCanvas]);
+
+  // Redo (Ctrl+Y / Ctrl+Shift+Z): saca el último snapshot del futuro y lo
+  // restaura, devolviendo el estado actual al historial.
+  const rehacerLadder = useCallback(() => {
+    if (futuroLadder.length === 0) return;
+    const siguiente = futuroLadder[futuroLadder.length - 1];
+    setFuturoLadder((f) => f.slice(0, -1));
+    setHistorialLadder((h) => {
+      const next = [...h, programaCanvas.rungs];
+      return next.length > LIMITE_HISTORIAL_LADDER
+        ? next.slice(next.length - LIMITE_HISTORIAL_LADDER)
+        : next;
+    });
+    setProgramaCanvas({ rungs: siguiente });
+    setProyectoModificado(true);
+  }, [futuroLadder, programaCanvas]);
+
   const handleVariableUpdate = useCallback((nombre: string, direccion: string) => {
     setIoMappings((prev) => ({ ...prev, [nombre]: direccion }));
+    setProyectoModificado(true);
+  }, []);
+
+  const handleAgregarVariable = useCallback((variable: VariableDeclaration) => {
+    setVariablesManuales((prev) => [...prev, variable]);
+    setProyectoModificado(true);
+  }, []);
+
+  const handleEliminarVariable = useCallback((nombre: string) => {
+    setVariablesManuales((prev) => prev.filter((v) => v.nombre !== nombre));
     setProyectoModificado(true);
   }, []);
 
@@ -137,10 +235,15 @@ export default function App() {
         version_formato: "1.0",
         fecha_modificacion: new Date().toISOString(),
       },
-      programa: { lenguaje_fuente: "st", codigo_st: codigoActual },
+      programa: {
+        lenguaje_fuente: tab === "ladder" ? "ladder" : "st",
+        codigo_st: codigoActual,
+        ladder_canvas: programaCanvas,
+      },
       io_mappings: ioMappings,
+      variables_manuales: variablesManuales,
     }),
-    [codigoActual, ioMappings]
+    [codigoActual, programaCanvas, tab, ioMappings, variablesManuales]
   );
 
   const handleGuardarComoProyecto = useCallback(async () => {
@@ -183,8 +286,12 @@ export default function App() {
       return;
     }
     setCodigoActual("");
+    setProgramaCanvas(programaArbolInicial());
+    setHistorialLadder([]);
+    setFuturoLadder([]);
     setIoMappings({});
     setVariables([]);
+    setVariablesManuales([]);
     setUltimoParseo(null);
     setFirmwareListoParaFlashear(false);
     setRutaProyecto(null);
@@ -206,7 +313,15 @@ export default function App() {
       if (!abierto) return; // usuario canceló
       const { proyecto, ruta } = abierto;
       setCodigoActual(proyecto.programa.codigo_st);
+      // Ruptura de formato (migración a árbol): solo se aceptan .plcproj cuyo
+      // ladder_canvas ya sea un árbol (rungs[].red). Un archivo viejo de grilla
+      // se ignora y se arranca con un rung vacío (ver nota en shared/types.ts).
+      setProgramaCanvas(esProgramaArbol(proyecto.programa.ladder_canvas) ? proyecto.programa.ladder_canvas! : programaArbolInicial());
+      setHistorialLadder([]);
+      setFuturoLadder([]);
+      if (proyecto.programa.lenguaje_fuente === "ladder") setTab("ladder");
       setIoMappings(proyecto.io_mappings ?? {});
+      setVariablesManuales(proyecto.variables_manuales ?? []);
       setFirmwareListoParaFlashear(false);
       setEditorKey((k) => k + 1); // remonta el editor con el código cargado
       setRutaProyecto(ruta);
@@ -251,22 +366,75 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleNuevoProyecto, handleAbrirProyecto, handleGuardarProyecto, handleGuardarComoProyecto]);
 
+  // Atajos de undo/redo del editor Ladder (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+  // Solo actúan con la pestaña Ladder activa y cuando el foco NO está en Monaco
+  // (que tiene su propio undo nativo) ni en un input de texto (undo del navegador).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (tab !== "ladder" || !e.ctrlKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el?.closest(".monaco-editor")) return;
+      const tag = (el?.tagName ?? "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        deshacerLadder();
+      } else if (k === "y" || (k === "z" && e.shiftKey)) {
+        e.preventDefault();
+        rehacerLadder();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, deshacerLadder, rehacerLadder]);
+
   const handleCompilar = useCallback(
     async (puerto: string) => {
-      if (!ultimoParseo || !ultimoParseo.result.success || !ultimoParseo.result.ast) {
-        log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
-        return;
-      }
       if (!boardSeleccionada) {
         log("error", "No se puede compilar: no hay ninguna placa real cargada (boards/*.json).");
         return;
       }
-      const { ast } = ultimoParseo.result;
+      if (!familiaSeleccionada || !FAMILIAS_SOPORTADAS.includes(familiaSeleccionada.familia_id)) {
+        log(
+          "error",
+          `La familia "${familiaSeleccionada?.nombre_visible ?? "desconocida"}" no está soportada en esta versión. Solo AVR ATmega328P (Arduino Uno) está disponible actualmente.`
+        );
+        return;
+      }
+
+      // El codegen difiere según la pestaña activa: ST parte del AST parseado;
+      // Ladder traduce el árbol de rungs → mismo AST → mismo backend.
+      let codegen;
+      let resumen: string;
+      if (tab === "ladder") {
+        if (programaCanvas.rungs.length === 0) {
+          log("error", "No se puede compilar: el programa Ladder no tiene rungs.");
+          return;
+        }
+        // Advertencias topológicas del árbol (ej. varias bobinas de salida).
+        advertenciasArbol(programaCanvas).forEach((a) => log("warning", a));
+        codegen = generarCodigoCDesdeLadder(
+          programaCanvas,
+          variablesManuales,
+          ioMappings,
+          boardSeleccionada,
+          nombreProyecto
+        );
+        resumen = `${variablesManuales.length} variables, ${programaCanvas.rungs.length} rungs procesados`;
+      } else {
+        if (!ultimoParseo || !ultimoParseo.result.success || !ultimoParseo.result.ast) {
+          log("error", "No se puede compilar: corrige los errores de sintaxis en el editor ST.");
+          return;
+        }
+        const { ast } = ultimoParseo.result;
+        codegen = generarCodigoC(ast, ioMappings, boardSeleccionada);
+        resumen = `${ast.variables.length} variables, ${ast.networks.length} networks procesados`;
+      }
 
       setCompilando(true);
       setFirmwareListoParaFlashear(false);
       try {
-        const codegen = generarCodigoC(ast, ioMappings, boardSeleccionada);
         if (!codegen.success || codegen.files.length === 0) {
           codegen.errors.forEach((e) => log("error", `Error de compilación: ${e}`));
           return;
@@ -279,7 +447,7 @@ export default function App() {
           return;
         }
         log("success", `Código C generado: ${guardado.path}`);
-        log("info", `${ast.variables.length} variables, ${ast.networks.length} networks procesados`);
+        log("info", resumen);
         codegen.warnings.forEach((w) => log("warning", w));
 
         // ST/Ladder → C ya está en disco; ahora avr-gcc lo compila a .hex.
@@ -296,7 +464,17 @@ export default function App() {
         setCompilando(false);
       }
     },
-    [ultimoParseo, ioMappings, boardSeleccionada, log]
+    [
+      tab,
+      programaCanvas,
+      variablesManuales,
+      nombreProyecto,
+      ultimoParseo,
+      ioMappings,
+      boardSeleccionada,
+      familiaSeleccionada,
+      log,
+    ]
   );
 
   const handleFlashear = useCallback(
@@ -327,6 +505,12 @@ export default function App() {
           onGuardar={handleGuardarProyecto}
           onGuardarComo={handleGuardarComoProyecto}
           onSalir={handleSalir}
+        />
+        <EditMenu
+          onDeshacer={deshacerLadder}
+          onRehacer={rehacerLadder}
+          puedeDeshacer={tab === "ladder" && historialLadder.length > 0}
+          puedeRehacer={tab === "ladder" && futuroLadder.length > 0}
         />
         {MENU_ITEMS_RESTANTES.map((item) => (
           <div key={item} className="menubar__item">
@@ -369,14 +553,23 @@ export default function App() {
                 onChangeImmediate={handleChangeImmediate}
               />
             )}
-            {tab === "ladder" && <LadderEditor />}
+            {tab === "ladder" && (
+              <LadderEditor
+                programa={programaCanvas}
+                onChange={handleLadderChange}
+                variables={variablesManuales}
+              />
+            )}
           </div>
         </section>
 
         <VariablesPanel
           variables={variables}
+          variablesManuales={variablesManuales}
           ioMappings={ioMappings}
           onVariableUpdate={handleVariableUpdate}
+          onAgregarVariable={handleAgregarVariable}
+          onEliminarVariable={handleEliminarVariable}
         />
       </div>
 
@@ -396,6 +589,9 @@ export default function App() {
         flasheando={flasheando}
         firmwareListo={firmwareListoParaFlashear}
         onBoardChange={handleBoardChange}
+        familiaSoportada={
+          familiaSeleccionada !== null && FAMILIAS_SOPORTADAS.includes(familiaSeleccionada.familia_id)
+        }
       />
     </div>
   );

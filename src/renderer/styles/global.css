@@ -15,11 +15,20 @@
   --warning: #cca700;
   --success: #4ec9b0;
 
+  /* Editor Ladder */
+  --ladder-rail: #6a9955;
+  --ladder-wire: #cccccc;
+  --ladder-text: #e6e6e6;
+  --ladder-text-dim: #858585;
+  --ladder-var: #4ec9b0;
+  --ladder-block: #333338;
+
   --menubar-h: 32px;
   --toolbar-h: 44px;
+  --ladder-toolbar-h: 52px;
   --tabs-h: 34px;
   --left-w: 220px;
-  --right-w: 240px;
+  --right-w: 300px;
   --console-h: 180px;
   --console-collapsed-h: 30px;
 }
@@ -135,9 +144,14 @@ body {
   text-align: left;
   cursor: pointer;
 }
-.menu-dropdown__item:hover {
+.menu-dropdown__item:hover:not(:disabled) {
   background: var(--accent);
   color: #ffffff;
+}
+.menu-dropdown__item:disabled {
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: default;
 }
 .menu-dropdown__atajo {
   color: var(--text-secondary);
@@ -290,15 +304,42 @@ body {
 
 .var-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 12px;
 }
 .var-table th,
 .var-table td {
   text-align: left;
-  padding: 6px 8px;
+  padding: 6px 5px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Anchos por columna: Nombre | Tipo | Clase | Dirección | acción (borrar).
+   Fijos para que las 4 columnas de datos entren siempre en el panel derecho. */
+.var-table th:nth-child(1),
+.var-table td:nth-child(1) {
+  width: 34%;
+}
+.var-table th:nth-child(2),
+.var-table td:nth-child(2) {
+  width: 14%;
+}
+.var-table th:nth-child(3),
+.var-table td:nth-child(3) {
+  width: 20%;
+}
+.var-table th:nth-child(4),
+.var-table td:nth-child(4) {
+  width: 26%;
+}
+.var-table th:nth-child(5),
+.var-table td:nth-child(5) {
+  width: 6%;
+  padding-left: 0;
+  padding-right: 2px;
 }
 .var-table th {
   color: var(--text-secondary);
@@ -338,6 +379,18 @@ body {
   border-color: var(--accent);
   background: var(--bg-secondary);
 }
+.var-table__fila-manual td:first-child {
+  color: var(--success);
+}
+.var-table__fila-nueva td {
+  background: rgba(0, 122, 204, 0.08);
+}
+.var-table__error {
+  margin-top: 2px;
+  color: var(--error);
+  font-size: 11px;
+  white-space: normal;
+}
 
 .btn-ghost {
   margin: 10px 12px;
@@ -352,6 +405,300 @@ body {
 .btn-ghost:hover {
   color: var(--text-primary);
   border-color: var(--accent);
+}
+
+/* ---------------- Editor Ladder ---------------- */
+
+.ladder-editor {
+  display: grid;
+  grid-template-rows: var(--ladder-toolbar-h) 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+.ladder-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.ladder-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ladder-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.ladder-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 62px;
+  padding: 4px 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.ladder-tool:hover {
+  border-color: var(--accent);
+}
+.ladder-tool--active {
+  border-color: var(--accent);
+  background: rgba(0, 122, 204, 0.18);
+}
+.ladder-tool__simbolo {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+}
+.ladder-tool__etiqueta {
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ladder-editor__lienzo {
+  overflow: auto;
+  min-height: 0;
+  background: var(--bg-primary);
+}
+.ladder-editor__lienzo--colocando {
+  cursor: crosshair;
+}
+
+.ladder-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 14px;
+}
+.ladder-canvas__vacio {
+  color: var(--text-secondary);
+  padding: 24px;
+  text-align: center;
+}
+.ladder-canvas__add {
+  align-self: flex-start;
+}
+
+.ladder-rung {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+.ladder-rung--sel {
+  border-color: var(--accent);
+}
+.ladder-rung__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+.ladder-rung__id {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.ladder-rung__comentario {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-style: italic;
+}
+.ladder-rung__toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.ladder-rung__toggle:hover {
+  color: var(--text-primary);
+}
+.ladder-rung__resumen {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.ladder-rung__acciones {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.btn--sm {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.ladder-rung__scroll {
+  position: relative; /* ancla para el popover de parámetros (posición absoluta) */
+  overflow-x: auto;
+}
+.ladder-rung__svg {
+  display: block;
+}
+
+.ladder-cell--vacia {
+  cursor: pointer;
+}
+.ladder-cell__punto {
+  fill: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.ladder-cell--vacia:hover .ladder-cell__punto {
+  opacity: 0.7;
+  fill: var(--accent);
+}
+.ladder-cell--ocupada,
+.ladder-cell--marcador {
+  cursor: pointer;
+}
+
+/* Placeholder de una celda vacía DENTRO de un camino de rama (FIX 4.2): borde
+   punteado que indica "clickeable para colocar", más visible que el punto
+   sutil del tronco porque las ramas suelen quedar vacías tras crearse. */
+.ladder-cell__placeholder {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.4;
+  transition: opacity 0.1s, stroke 0.1s;
+}
+.ladder-cell--vacia:hover .ladder-cell__placeholder {
+  opacity: 0.9;
+  stroke: var(--accent);
+}
+
+/* Área clicable de un pin editable inline de TON/CTU (PT/PV, ET/CV, Reset) */
+.ladder-campo-hit {
+  cursor: text;
+}
+.ladder-campo-hit:hover {
+  fill: rgba(0, 122, 204, 0.12);
+}
+
+/* Separador vertical dentro de la toolbar (entre el cursor y la paleta) */
+.ladder-toolbar__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 4px;
+  background: var(--border);
+}
+
+/* Botón flotante "+ Camino paralelo" (FIX 4/§1): aparece al seleccionar el
+   nodo de apertura de un grupo de bifurcación existente; agrega una fila más
+   a ESE grupo sin recolocar marcadores (flujo primario de N caminos). */
+.ladder-btn-camino {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ladder-btn-camino:hover {
+  filter: brightness(1.1);
+}
+
+/* Botón "✗" de un camino individual de una rama (elimina SOLO ese camino) */
+.ladder-del-camino {
+  cursor: pointer;
+}
+.ladder-del-camino circle {
+  fill: var(--bg-panel);
+  stroke: var(--error);
+  opacity: 0.55;
+}
+.ladder-del-camino text {
+  fill: var(--error);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.ladder-del-camino:hover circle,
+.ladder-del-camino:hover text {
+  opacity: 1;
+}
+.ladder-del-camino:hover circle {
+  fill: var(--error);
+}
+.ladder-del-camino:hover text {
+  fill: #fff;
+}
+
+/* Borde resaltado del elemento seleccionado */
+.ladder-sel-box {
+  fill: rgba(0, 122, 204, 0.1);
+  stroke: var(--accent);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* Botón "✗" flotante sobre el elemento seleccionado */
+.ladder-del-flotante {
+  cursor: pointer;
+}
+.ladder-del-flotante circle {
+  fill: var(--bg-panel);
+  stroke: var(--error);
+}
+.ladder-del-flotante text {
+  fill: var(--error);
+}
+.ladder-del-flotante:hover circle {
+  fill: var(--error);
+}
+.ladder-del-flotante:hover text {
+  fill: #fff;
+}
+
+/* Nodo de unión (●) donde el tronco se bifurca / reintegra */
+.ladder-nodo {
+  fill: var(--ladder-wire);
+  stroke: none;
+}
+
+.ladder-rung__hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-right: 4px;
+}
+
+/* Input inline para asignar la variable de un elemento (dentro de foreignObject) */
+.ladder-inline-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 3px;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--ladder-var);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  text-align: center;
+}
+.ladder-inline-input:focus {
+  outline: none;
 }
 
 /* ---------------- Consola inferior ---------------- */
