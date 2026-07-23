@@ -19,6 +19,7 @@ import { layoutRed, medir } from "./layout";
 import type { NodoPosicionado } from "./layout";
 import { camposBloque, ElementoSVG } from "./elements/LadderElements";
 import { InlineVarInput } from "./InlineControls";
+import { anotarFlujo, claveFlujo } from "./flujo";
 
 const TOP_PAD = 18;
 
@@ -56,6 +57,11 @@ interface Props {
   onEliminarCamino: (rutaParalelo: number[], indice: number) => void;
   editandoVar: number[] | null;
   editandoCampo: { ruta: number[]; campo: CampoBloqueId } | null;
+  /**
+   * Estado en vivo de las variables (evento `plc_estado`) para el coloreo de
+   * flujo. `{}` (vacío) = monitoreo apagado → todo se dibuja en colores normales.
+   */
+  estadoVivo: Record<string, boolean>;
 }
 
 const claveRuta = (r: number[]) => (r.length === 0 ? "raiz" : r.join("-"));
@@ -97,11 +103,18 @@ export function LadderRung({
   onEliminarCamino,
   editandoVar,
   editandoCampo,
+  estadoVivo,
 }: Props) {
   const [colapsado, setColapsado] = useState(false);
 
   const { ancho, alto } = medir(rung.red);
   const layout = layoutRed(rung.red, RIEL_PAD, TOP_PAD);
+
+  // Mapa ruta → energizado para el coloreo en vivo. `null` cuando el monitoreo
+  // está apagado (estadoVivo vacío), señal de "no colorear nada".
+  const monitoreando = Object.keys(estadoVivo).length > 0;
+  const flujo = monitoreando ? anotarFlujo(rung.red, estadoVivo) : null;
+  const nodoActivo = (ruta: number[]): boolean => flujo?.get(claveFlujo(ruta)) ?? false;
   const leftRailX = RIEL_PAD;
   const rightRailX = RIEL_PAD + ancho;
   const svgW = rightRailX + RIEL_PAD;
@@ -241,7 +254,7 @@ export function LadderRung({
                 y1={s.y1}
                 x2={s.x2}
                 y2={s.y2}
-                stroke="var(--ladder-wire)"
+                stroke={s.ruta && nodoActivo(s.ruta) ? "var(--ladder-flujo)" : "var(--ladder-wire)"}
                 strokeWidth={2}
               />
             ))}
@@ -363,6 +376,7 @@ export function LadderRung({
                     etVar={el.parametros?.et_var}
                     cvVar={el.parametros?.cv_var}
                     resetVar={el.parametros?.reset_var}
+                    activo={nodoActivo(n.ruta)}
                   />
                   {editando && (
                     <foreignObject x={x + 3} y={y + 1} width={w - 6} height={18}>

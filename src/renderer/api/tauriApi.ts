@@ -7,6 +7,7 @@
  * se usa para lo que toca el sistema operativo: puertos serie, archivos, procesos.
  */
 import { invoke } from "@tauri-apps/api/tauri";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   CGenerator,
   STParser,
@@ -264,6 +265,33 @@ export async function abrirProyecto(): Promise<AbrirProyectoResult | null> {
 /** Cierra la aplicación (comando Rust `exit_app`). */
 export async function salirApp(): Promise<void> {
   await invoke("exit_app");
+}
+
+// ── Monitoreo serial en vivo ────────────────────────────────────────────────
+
+/**
+ * Abre el puerto y lanza el lector serial en background (comando Rust
+ * `iniciar_monitoreo`). El firmware emite tramas `VAR:...` que el backend
+ * reenvía como el evento `plc_estado`. Rechaza con mensaje legible si el puerto
+ * no se puede abrir (ocupado, inexistente, etc.).
+ */
+export async function iniciarMonitoreo(puerto: string, baud = 9600): Promise<void> {
+  await invoke<void>("iniciar_monitoreo", { puerto, baud });
+}
+
+/** Detiene el lector serial y libera el puerto (comando Rust `detener_monitoreo`). */
+export async function detenerMonitoreo(): Promise<void> {
+  await invoke<void>("detener_monitoreo");
+}
+
+/**
+ * Se suscribe al evento `plc_estado` (estado en vivo de las variables BOOL).
+ * Devuelve la promesa de la función para cancelar la suscripción.
+ */
+export function escucharEstadoPlc(
+  cb: (estado: Record<string, boolean>) => void
+): Promise<UnlistenFn> {
+  return listen<Record<string, boolean>>("plc_estado", (e) => cb(e.payload));
 }
 
 // ── Boards / familias de MCU (§7.1, §7.2) ───────────────────────────────────

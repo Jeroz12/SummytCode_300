@@ -22,6 +22,8 @@
   --ladder-text-dim: #858585;
   --ladder-var: #4ec9b0;
   --ladder-block: #333338;
+  /* Flujo energizado (monitoreo en vivo): verde eléctrico. */
+  --ladder-flujo: #00c853;
 
   --menubar-h: 32px;
   --toolbar-h: 44px;

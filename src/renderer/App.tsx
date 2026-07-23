@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { appWindow } from "@tauri-apps/api/window";
 import { CODIGO_EJEMPLO, STEditor } from "../editors/st/STEditor";
 import { LadderEditor } from "../editors/ladder/LadderEditor";
@@ -33,6 +33,9 @@ import {
   guardarProyectoEnRuta,
   salirApp,
   getSerialPorts,
+  iniciarMonitoreo,
+  detenerMonitoreo,
+  escucharEstadoPlc,
 } from "./api/tauriApi";
 
 type Tab = "ladder" | "st" | "fbd";
@@ -109,6 +112,10 @@ export default function App() {
   );
   const [compilando, setCompilando] = useState(false);
   const [flasheando, setFlasheando] = useState(false);
+  // Monitoreo serial en vivo (colorea el canvas Ladder). `estadoVivo` es el
+  // último estado de variables recibido por el evento `plc_estado`.
+  const [monitoreando, setMonitoreando] = useState(false);
+  const [estadoVivo, setEstadoVivo] = useState<Record<string, boolean>>({});
   // True una vez que avr-gcc produjo generated/build/plc_firmware.hex con éxito.
   const [firmwareListoParaFlashear, setFirmwareListoParaFlashear] = useState(false);
 
@@ -552,6 +559,61 @@ export default function App() {
     [log]
   );
 
+  // ── Monitoreo serial en vivo ────────────────────────────────────────────
+  // Suscripción al evento `plc_estado` (una sola vez): cada trama actualiza el
+  // estado en vivo que colorea el canvas. La suscripción se mantiene todo el
+  // ciclo de vida; solo llegan eventos mientras el backend esté monitoreando.
+  useEffect(() => {
+    const unlisten = escucharEstadoPlc(setEstadoVivo);
+    return () => {
+      void unlisten.then((f) => f());
+    };
+  }, []);
+
+  // Ref al estado de monitoreo para el cleanup de desmontaje (evita recrear el
+  // efecto de limpieza en cada toggle).
+  const monitoreandoRef = useRef(false);
+  useEffect(() => {
+    monitoreandoRef.current = monitoreando;
+  }, [monitoreando]);
+
+  // Al desmontar la app: si quedaba monitoreo activo, cerrar el puerto en Rust.
+  useEffect(() => {
+    return () => {
+      if (monitoreandoRef.current) void detenerMonitoreo();
+    };
+  }, []);
+
+  // Toggle del botón "Monitorear" (recibe el puerto elegido en la Toolbar).
+  const handleToggleMonitoreo = useCallback(
+    async (puerto: string) => {
+      if (monitoreando) {
+        try {
+          await detenerMonitoreo();
+        } catch (e) {
+          log("error", `Error al detener el monitoreo: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        setMonitoreando(false);
+        setEstadoVivo({}); // limpia el coloreo del canvas
+        log("info", "Monitoreo detenido");
+        return;
+      }
+      if (!puerto) {
+        log("error", "No hay puerto seleccionado para monitorear.");
+        return;
+      }
+      try {
+        await iniciarMonitoreo(puerto, 9600);
+        setMonitoreando(true);
+        log("success", `Monitoreando ${puerto} a 9600 baud`);
+      } catch (e) {
+        // Puerto ocupado, inexistente, etc.: se informa y NO se activa el monitoreo.
+        log("error", `No se pudo iniciar el monitoreo: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [monitoreando, log]
+  );
+
   return (
     <div className="app">
       {/* Menubar */}
@@ -615,6 +677,7 @@ export default function App() {
                 programa={programaCanvas}
                 onChange={handleLadderChange}
                 variables={variablesManuales}
+                estadoVivo={monitoreando ? estadoVivo : {}}
               />
             )}
           </div>
@@ -656,6 +719,9 @@ export default function App() {
         familiaSoportada={
           familiaSeleccionada !== null && FAMILIAS_SOPORTADAS.includes(familiaSeleccionada.familia_id)
         }
+        monitoreando={monitoreando}
+        onToggleMonitoreo={handleToggleMonitoreo}
+        puedeMonitorearLenguaje={tab === "ladder"}
       />
     </div>
   );

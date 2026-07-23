@@ -132,4 +132,52 @@ describe("CGenerator", () => {
     expect(c).toContain("digitalWrite(10, Motor);");
     expect(c).toContain("/* %IX0.0 → D2 */");
   });
+
+  // 7. Telemetría serial: trama de estado para variables BOOL.
+  it("emite la trama serial para variables BOOL", () => {
+    const c = generar(
+      programa({
+        variables: [
+          { nombre: "Start", tipo: "BOOL", clase: "VAR_INPUT" },
+          { nombre: "Stop", tipo: "BOOL", clase: "VAR_INPUT" },
+          { nombre: "Motor", tipo: "BOOL", clase: "VAR_OUTPUT" },
+        ],
+      })
+    );
+    // Helpers USART + macro autocontenidos (avr-gcc puro, sin librería externa).
+    expect(c).toContain("static void plc_serial_init(void)");
+    expect(c).toContain("#define Serial_print_bool(name, val)");
+    // Se inicializa una sola vez, dentro de plc_io_init (setup()).
+    expect(c).toContain("plc_serial_init();");
+    // Trama: "VAR:Start=1,Stop=0,Motor=1\n" con comas de separación (sin coma final).
+    expect(c).toContain('Serial_print("VAR:");');
+    expect(c).toContain('Serial_print_bool("Start", Start);');
+    expect(c).toContain('Serial_print_bool("Stop", Stop);');
+    expect(c).toContain('Serial_print_bool("Motor", Motor);');
+    expect(c).toContain('Serial_print(",");');
+    expect(c).toContain('Serial_print("\\n");');
+  });
+
+  // 8. Sin variables BOOL no se emite ningún bloque de telemetría serial.
+  it("no emite telemetría serial cuando no hay variables BOOL", () => {
+    const c = generar(
+      programa({ variables: [{ nombre: "Contador", tipo: "INT", clase: "VAR" }] })
+    );
+    expect(c).not.toContain("plc_serial_init");
+    expect(c).not.toContain("Serial_print");
+  });
+
+  // 9. La última variable de la trama no lleva coma de separación.
+  it("no añade coma tras la última variable de la trama", () => {
+    const c = generar(
+      programa({ variables: [{ nombre: "Solo", tipo: "BOOL", clase: "VAR" }] })
+    );
+    // Con una única variable: valor seguido directamente del salto de línea.
+    const idxVar = c.indexOf('Serial_print_bool("Solo", Solo);');
+    const idxNl = c.indexOf('Serial_print("\\n");', idxVar);
+    expect(idxVar).toBeGreaterThan(-1);
+    expect(idxNl).toBeGreaterThan(-1);
+    // Entre la variable y el "\n" no debe haber una emisión de coma.
+    expect(c.slice(idxVar, idxNl)).not.toContain('Serial_print(",");');
+  });
 });

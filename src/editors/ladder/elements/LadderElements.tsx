@@ -29,12 +29,22 @@ interface SimboloProps {
   etVar?: string;
   cvVar?: string;
   resetVar?: string;
+  /**
+   * Monitoreo en vivo: por este elemento circula corriente. Colorea sus
+   * conductores de verde (--ladder-flujo). `undefined`/false = colores normales.
+   */
+  activo?: boolean;
+}
+
+/** Color de los conductores de un símbolo: verde si está energizado, si no el normal. */
+function colorTrazo(activo?: boolean): string {
+  return activo ? "var(--ladder-flujo)" : TRAZO;
 }
 
 /** Cable horizontal de borde a borde a la altura del centro. */
-function CableBase({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+function CableBase({ x, y, w, h, stroke = TRAZO }: { x: number; y: number; w: number; h: number; stroke?: string }) {
   const midY = y + h / 2;
-  return <line x1={x} y1={midY} x2={x + w} y2={midY} stroke={TRAZO} strokeWidth={2} />;
+  return <line x1={x} y1={midY} x2={x + w} y2={midY} stroke={stroke} strokeWidth={2} />;
 }
 
 /** Etiqueta de la variable, centrada sobre el símbolo. */
@@ -53,30 +63,32 @@ function EtiquetaVar({ x, y, w, texto }: { x: number; y: number; w: number; text
   );
 }
 
-function ContactoNA({ x, y, w, h, variable }: SimboloProps) {
+function ContactoNA({ x, y, w, h, variable, activo }: SimboloProps) {
   const midY = y + h / 2;
   const cx = x + w / 2;
+  const trazo = colorTrazo(activo);
   return (
     <>
-      <CableBase x={x} y={y} w={w} h={h} />
+      <CableBase x={x} y={y} w={w} h={h} stroke={trazo} />
       {/* dos barras verticales que forman el contacto abierto */}
-      <line x1={cx - 8} y1={midY - 12} x2={cx - 8} y2={midY + 12} stroke={TRAZO} strokeWidth={2} />
-      <line x1={cx + 8} y1={midY - 12} x2={cx + 8} y2={midY + 12} stroke={TRAZO} strokeWidth={2} />
+      <line x1={cx - 8} y1={midY - 12} x2={cx - 8} y2={midY + 12} stroke={trazo} strokeWidth={2} />
+      <line x1={cx + 8} y1={midY - 12} x2={cx + 8} y2={midY + 12} stroke={trazo} strokeWidth={2} />
       <EtiquetaVar x={x} y={y} w={w} texto={variable} />
     </>
   );
 }
 
-function ContactoNC({ x, y, w, h, variable }: SimboloProps) {
+function ContactoNC({ x, y, w, h, variable, activo }: SimboloProps) {
   const midY = y + h / 2;
   const cx = x + w / 2;
+  const trazo = colorTrazo(activo);
   return (
     <>
-      <CableBase x={x} y={y} w={w} h={h} />
-      <line x1={cx - 8} y1={midY - 12} x2={cx - 8} y2={midY + 12} stroke={TRAZO} strokeWidth={2} />
-      <line x1={cx + 8} y1={midY - 12} x2={cx + 8} y2={midY + 12} stroke={TRAZO} strokeWidth={2} />
+      <CableBase x={x} y={y} w={w} h={h} stroke={trazo} />
+      <line x1={cx - 8} y1={midY - 12} x2={cx - 8} y2={midY + 12} stroke={trazo} strokeWidth={2} />
+      <line x1={cx + 8} y1={midY - 12} x2={cx + 8} y2={midY + 12} stroke={trazo} strokeWidth={2} />
       {/* diagonal que marca "normalmente cerrado" */}
-      <line x1={cx - 9} y1={midY + 12} x2={cx + 9} y2={midY - 12} stroke={TRAZO} strokeWidth={2} />
+      <line x1={cx - 9} y1={midY + 12} x2={cx + 9} y2={midY - 12} stroke={trazo} strokeWidth={2} />
       <EtiquetaVar x={x} y={y} w={w} texto={variable} />
     </>
   );
@@ -84,26 +96,27 @@ function ContactoNC({ x, y, w, h, variable }: SimboloProps) {
 
 /** Bobina genérica: dos arcos "( )" con una letra/marca opcional en el centro. */
 function bobina(props: SimboloProps, marca?: string, slash?: boolean) {
-  const { x, y, w, h, variable } = props;
+  const { x, y, w, h, variable, activo } = props;
   const midY = y + h / 2;
   const cx = x + w / 2;
   const r = 12;
+  const trazo = colorTrazo(activo);
   return (
     <>
-      <line x1={x} y1={midY} x2={cx - r} y2={midY} stroke={TRAZO} strokeWidth={2} />
-      <line x1={cx + r} y1={midY} x2={x + w} y2={midY} stroke={TRAZO} strokeWidth={2} />
+      <line x1={x} y1={midY} x2={cx - r} y2={midY} stroke={trazo} strokeWidth={2} />
+      <line x1={cx + r} y1={midY} x2={x + w} y2={midY} stroke={trazo} strokeWidth={2} />
       {/* arco izquierdo "(" */}
       <path
         d={`M ${cx - r} ${midY - 14} A ${r} 14 0 0 0 ${cx - r} ${midY + 14}`}
         fill="none"
-        stroke={TRAZO}
+        stroke={trazo}
         strokeWidth={2}
       />
       {/* arco derecho ")" */}
       <path
         d={`M ${cx + r} ${midY - 14} A ${r} 14 0 0 1 ${cx + r} ${midY + 14}`}
         fill="none"
-        stroke={TRAZO}
+        stroke={trazo}
         strokeWidth={2}
       />
       {marca && (
@@ -112,7 +125,7 @@ function bobina(props: SimboloProps, marca?: string, slash?: boolean) {
         </text>
       )}
       {slash && (
-        <line x1={cx - 9} y1={midY + 12} x2={cx + 9} y2={midY - 12} stroke={TRAZO} strokeWidth={2} />
+        <line x1={cx - 9} y1={midY + 12} x2={cx + 9} y2={midY - 12} stroke={trazo} strokeWidth={2} />
       )}
       <EtiquetaVar x={x} y={y} w={w} texto={variable} />
     </>
@@ -202,13 +215,14 @@ function bloque(props: SimboloProps, tipo: "ton" | "ctu") {
         : "?";
   const valorDer = (tipo === "ton" ? props.etVar : props.cvVar) || "";
   const yPin = by + bh - 8; // altura de los pines PT/ET (parte baja de la caja)
+  const trazo = colorTrazo(props.activo);
 
   return (
     <>
       {/* Flujo principal IN→Q sobre la línea del riel */}
-      <line x1={x} y1={midY} x2={bx} y2={midY} stroke={TRAZO} strokeWidth={2} />
-      <line x1={bxr} y1={midY} x2={x + w} y2={midY} stroke={TRAZO} strokeWidth={2} />
-      <rect x={bx} y={by} width={bw} height={bh} rx={4} fill="var(--ladder-block)" stroke={TRAZO} strokeWidth={2} />
+      <line x1={x} y1={midY} x2={bx} y2={midY} stroke={trazo} strokeWidth={2} />
+      <line x1={bxr} y1={midY} x2={x + w} y2={midY} stroke={trazo} strokeWidth={2} />
+      <rect x={bx} y={by} width={bw} height={bh} rx={4} fill="var(--ladder-block)" stroke={trazo} strokeWidth={2} />
 
       {/* Nombre de instancia arriba (editable inline) */}
       <EtiquetaVar x={x} y={y} w={w} texto={variable} />

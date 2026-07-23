@@ -34,6 +34,8 @@ interface Props {
   onAgregarRung: () => void;
   onAgregarCamino: (rungId: string, rutaParalelo: number[]) => void;
   onEliminarCamino: (rungId: string, rutaParalelo: number[], indice: number) => void;
+  /** Estado en vivo de variables para el coloreo de flujo (`{}` = monitoreo apagado). */
+  estadoVivo: Record<string, boolean>;
 }
 
 export function LadderCanvas({
@@ -58,6 +60,7 @@ export function LadderCanvas({
   onAgregarRung,
   onAgregarCamino,
   onEliminarCamino,
+  estadoVivo,
 }: Props) {
   const rutaScope = (ref: RutaRef, rungId: string) => (ref && ref.rungId === rungId ? ref.ruta : null);
   const campoScope = (rungId: string) =>
@@ -96,6 +99,7 @@ export function LadderCanvas({
           onEliminarRung={() => onEliminarRung(rung.id)}
           onAgregarCamino={(ruta) => onAgregarCamino(rung.id, ruta)}
           onEliminarCamino={(ruta, indice) => onEliminarCamino(rung.id, ruta, indice)}
+          estadoVivo={estadoVivo}
         />
       ))}
 

@@ -123,14 +123,24 @@ export class CGenerator {
       progLines.push(...this.emitirNetwork(net, ctx));
     }
 
+    // ── Telemetría serial ───────────────────────────────────────────────
+    // Solo son monitoreables las variables BOOL (VAR / VAR_INPUT / VAR_OUTPUT).
+    const monitorables = programa.variables.filter((v) => v.tipo === "BOOL");
+    const serialLines = monitorables.length ? emitirSeccionSerial() : [];
+    const reportLines = monitorables.length ? emitirReporteSerial(monitorables) : [];
+    // La telemetría se inicializa una sola vez, junto al resto del I/O (setup()).
+    if (monitorables.length) ioInit.unshift("plc_serial_init();");
+
     // ── Ensamblado del archivo ──────────────────────────────────────────
     const contenido = ensamblarArchivo(programa, target, {
       varLines,
       instanceLines,
+      serialLines,
       ioInit,
       readInputs,
       writeOutputs,
       progLines,
+      reportLines,
     });
 
     return {
@@ -211,13 +221,66 @@ function comentarioIec(
   return `  /* ${v.direccion_iec}${etiqueta ? ` → ${etiqueta}` : ""} */`;
 }
 
+/**
+ * Bloque de telemetría serial (USART0 nativo, sin core de Arduino).
+ * Emite el mínimo de USART para volcar el estado de las variables por serial:
+ * init a 9600 baud @ 16 MHz, envío de un carácter/cadena y la macro
+ * `Serial_print_bool`. Todo `static`: si hay monitoreables, todo se usa.
+ */
+function emitirSeccionSerial(): string[] {
+  return [
+    "/* USART0 @ 9600 baud, F_CPU = 16 MHz → UBRR = 16000000/(16*9600) - 1 = 103 */",
+    "static void plc_serial_init(void) {",
+    "  UBRR0H = 0;",
+    "  UBRR0L = 103;",
+    "  UCSR0B = (1 << TXEN0);                    /* habilita transmisor */",
+    "  UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);   /* 8 bits de datos, 1 stop */",
+    "}",
+    "",
+    "static void plc_serial_putc(char c) {",
+    "  while (!(UCSR0A & (1 << UDRE0))) { }       /* espera buffer de TX libre */",
+    "  UDR0 = (uint8_t)c;",
+    "}",
+    "",
+    "static void plc_serial_print(const char* s) {",
+    "  while (*s) plc_serial_putc(*s++);",
+    "}",
+    "",
+    "#define Serial_print(s) plc_serial_print(s)",
+    "#define Serial_print_bool(name, val) do { \\",
+    "    plc_serial_print(name); \\",
+    "    plc_serial_putc('='); \\",
+    "    plc_serial_putc((val) ? '1' : '0'); \\",
+    "  } while (0)",
+  ];
+}
+
+/**
+ * Trama de reporte emitida al final de cada ciclo PLC:
+ *   "VAR:Start=1,Stop=0,Motor=1\n"
+ * Las comas separan (no terminan): la última variable no lleva coma. A 9600 baud
+ * con <20 booleanas cabe holgadamente en un ciclo de scan sin bloquear.
+ */
+function emitirReporteSerial(monitorables: VariableDeclaration[]): string[] {
+  const lineas: string[] = ['Serial_print("VAR:");'];
+  monitorables.forEach((v, i) => {
+    const nombre = sanitizarNombre(v.nombre);
+    lineas.push(`Serial_print_bool("${nombre}", ${nombre});`);
+    if (i < monitorables.length - 1) lineas.push('Serial_print(",");');
+  });
+  lineas.push('Serial_print("\\n");');
+  return lineas;
+}
+
 interface Secciones {
   varLines: string[];
   instanceLines: string[];
+  serialLines: string[];
   ioInit: string[];
   readInputs: string[];
   writeOutputs: string[];
   progLines: string[];
+  reportLines: string[];
 }
 
 /** Une todas las secciones en el texto final de plc_program.c. */
@@ -240,6 +303,12 @@ function ensamblarArchivo(programa: Programa, target: TargetConfig, s: Secciones
   L.push(...(s.instanceLines.length ? s.instanceLines : ["/* (sin timers ni contadores) */"]));
   L.push("");
 
+  if (s.serialLines.length) {
+    L.push("/* ── TELEMETRÍA SERIAL ── */");
+    L.push(...s.serialLines);
+    L.push("");
+  }
+
   L.push("/* ── INICIALIZACIÓN DE I/O ── */");
   L.push("void plc_io_init(void) {");
   if (s.ioInit.length) L.push(bloque(s.ioInit));
@@ -261,6 +330,11 @@ function ensamblarArchivo(programa: Programa, target: TargetConfig, s: Secciones
   L.push("/* ── LÓGICA DEL PROGRAMA ── */");
   L.push("void plc_program(void) {");
   if (s.progLines.length) L.push(bloque(s.progLines));
+  if (s.reportLines.length) {
+    if (s.progLines.length) L.push("");
+    L.push(bloque(["/* Reporte de estado por serial (una trama por ciclo). */"]));
+    L.push(bloque(s.reportLines));
+  }
   L.push("}");
   L.push("");
 

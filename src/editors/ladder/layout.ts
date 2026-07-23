@@ -30,6 +30,12 @@ export interface Segmento {
   y1: number;
   x2: number;
   y2: number;
+  /**
+   * Ruta del nodo del árbol al que pertenece el segmento (para el coloreo de
+   * flujo en vivo): la celda "vacio" que dibuja, o la rama de un paralelo cuyos
+   * conectores son. `undefined` = cable sin nodo asociado (no se colorea).
+   */
+  ruta?: number[];
 }
 
 /** Un camino individual dentro de un paralelo (para dibujar el ✗ de borrado). */
@@ -111,7 +117,7 @@ export function layoutRed(
       // Cable base horizontal a través de la celda (para elementos lo redibuja
       // ElementoSVG, pero para "vacio" es la única fuente del cable).
       const segmentos: Segmento[] =
-        red.tipo === "vacio" ? [{ x1: x, y1: midY, x2: x + ancho, y2: midY }] : [];
+        red.tipo === "vacio" ? [{ x1: x, y1: midY, x2: x + ancho, y2: midY, ruta }] : [];
       return {
         nodos: [{ x, y, w: ancho, h: alto, ref: red, ruta }],
         segmentos,
@@ -154,7 +160,8 @@ export function layoutRed(
       red.ramas.forEach((rama, i) => {
         if (i > 0) cy += RAMA_GAP;
         const m = medir(rama);
-        const sub = layoutRed(rama, ramaX, cy, [...ruta, i]);
+        const rutaRama = [...ruta, i];
+        const sub = layoutRed(rama, ramaX, cy, rutaRama);
         const ramaMidY = sub.midY;
         nodos.push(...sub.nodos);
         segmentos.push(...sub.segmentos);
@@ -162,12 +169,14 @@ export function layoutRed(
 
         // Conectores: apertura (vertical desde midY del paralelo a la rama +
         // stub horizontal hasta el inicio de la rama) y cierre (stub desde el
-        // fin de la rama al nodo de cierre + vertical de vuelta a midY).
-        segmentos.push({ x1: xAbrir, y1: midY, x2: xAbrir, y2: ramaMidY });
-        segmentos.push({ x1: xAbrir, y1: ramaMidY, x2: ramaX, y2: ramaMidY });
+        // fin de la rama al nodo de cierre + vertical de vuelta a midY). Todos
+        // se etiquetan con la ruta de SU rama, para que el coloreo de flujo los
+        // encienda cuando esa rama conduce.
+        segmentos.push({ x1: xAbrir, y1: midY, x2: xAbrir, y2: ramaMidY, ruta: rutaRama });
+        segmentos.push({ x1: xAbrir, y1: ramaMidY, x2: ramaX, y2: ramaMidY, ruta: rutaRama });
         const ramaDer = ramaX + m.ancho;
-        segmentos.push({ x1: ramaDer, y1: ramaMidY, x2: xCerrar, y2: ramaMidY });
-        segmentos.push({ x1: xCerrar, y1: midY, x2: xCerrar, y2: ramaMidY });
+        segmentos.push({ x1: ramaDer, y1: ramaMidY, x2: xCerrar, y2: ramaMidY, ruta: rutaRama });
+        segmentos.push({ x1: xCerrar, y1: midY, x2: xCerrar, y2: ramaMidY, ruta: rutaRama });
 
         caminos.push({ indice: i, ruta: [...ruta, i], xIzq: xAbrir, midY: ramaMidY });
         cy += m.alto;

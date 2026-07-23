@@ -27,12 +27,21 @@ interface Props {
    * educativo en consola en vez de encontrarse un botón muerto sin explicación.
    */
   familiaSoportada?: boolean;
+  /** True mientras el monitoreo serial en vivo está activo. */
+  monitoreando?: boolean;
+  /** Inicia/detiene el monitoreo del puerto seleccionado (toggle). */
+  onToggleMonitoreo?: (puerto: string) => void;
+  /**
+   * True si el lenguaje activo permite monitorear (solo Ladder: en ST no hay
+   * canvas que colorear). Junto con "hay puerto" habilita el botón.
+   */
+  puedeMonitorearLenguaje?: boolean;
 }
 
 /**
  * Barra inferior de acciones. "Compilar" ejecuta el pipeline real (ST→AST→C→avr-gcc).
- * "Flashear" se habilita solo tras una compilación exitosa. "Monitorear" sigue
- * deshabilitado (fase futura).
+ * "Flashear" se habilita solo tras una compilación exitosa. "Monitorear" abre el
+ * lector serial en vivo (solo en modo Ladder y con un puerto seleccionado).
  */
 export function Toolbar({
   onCompilar,
@@ -42,6 +51,9 @@ export function Toolbar({
   firmwareListo,
   onBoardChange,
   familiaSoportada = true,
+  monitoreando = false,
+  onToggleMonitoreo,
+  puedeMonitorearLenguaje = false,
 }: Props) {
   const [puertos, setPuertos] = useState<string[]>([]);
   const [puerto, setPuerto] = useState<string>("");
@@ -133,9 +145,30 @@ export function Toolbar({
       >
         {flasheando ? "⏳ Flasheando…" : "⬆ Flashear"}
       </button>
-      <button className="btn btn--disabled" title="Disponible próximamente" disabled>
-        📡 Monitorear
-      </button>
+      {(() => {
+        const hayPuerto = puerto !== "";
+        const puedeMonitorear = hayPuerto && puedeMonitorearLenguaje;
+        // Estando ya monitoreando, el botón siempre permite detener.
+        const habilitado = monitoreando || puedeMonitorear;
+        return (
+          <button
+            className={`btn ${monitoreando ? "btn--primary" : ""} ${habilitado ? "" : "btn--disabled"}`}
+            onClick={() => onToggleMonitoreo?.(puerto)}
+            disabled={!habilitado}
+            title={
+              monitoreando
+                ? "Detener el monitoreo en vivo"
+                : !puedeMonitorearLenguaje
+                  ? "El monitoreo en vivo solo está disponible en modo Ladder"
+                  : !hayPuerto
+                    ? "Selecciona un puerto para monitorear"
+                    : "Lee el estado de las variables por serial y colorea el canvas"
+            }
+          >
+            {monitoreando ? "⏹ Detener" : "📡 Monitorear"}
+          </button>
+        );
+      })()}
 
       <div className="toolbar__spacer" />
 

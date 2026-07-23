@@ -44,6 +44,11 @@ interface Props {
   onChange: (programa: ProgramaArbol) => void;
   /** Variables declaradas (panel), para autocomplete en la edición inline. */
   variables: VariableDeclaration[];
+  /**
+   * Estado en vivo de variables (monitoreo serial) para el coloreo de flujo.
+   * `{}` o ausente = monitoreo apagado → sin coloreo.
+   */
+  estadoVivo?: Record<string, boolean>;
 }
 
 /** Campo editable de un bloque TON/CTU (los pines, no la variable/Q). */
@@ -58,7 +63,7 @@ function elementoPorDefecto(tipo: TipoElemento): ElementoLadder {
   return { tipo, variable: "" };
 }
 
-export function LadderEditor({ programa, onChange, variables }: Props) {
+export function LadderEditor({ programa, onChange, variables, estadoVivo = {} }: Props) {
   const [herramienta, setHerramienta] = useState<Herramienta>(null);
   const [rungSel, setRungSel] = useState<string | null>(programa.rungs[0]?.id ?? null);
   const [seleccion, setSeleccion] = useState<RutaRef>(null);
@@ -256,6 +261,7 @@ export function LadderEditor({ programa, onChange, variables }: Props) {
           onAgregarRung={handleAgregarRung}
           onAgregarCamino={handleAgregarCamino}
           onEliminarCamino={handleEliminarCamino}
+          estadoVivo={estadoVivo}
         />
       </div>
 
